@@ -20,7 +20,8 @@ import {
   Lock,
   LogOut,
   LogIn,
-  UserPlus
+  UserPlus,
+  Home
 } from 'lucide-react';
 
 export default function Navbar({ onOpenSOS }) {
@@ -341,6 +342,59 @@ export default function Navbar({ onOpenSOS }) {
           )}
         </div>
       )}
+
+      {/* Mobile Persistent Bottom Tab Bar */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 shadow-2xl px-2 py-1.5 flex items-center justify-around">
+        <Link
+          to="/dashboard"
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl text-[10px] font-bold transition-colors ${
+            location.pathname === '/dashboard' ? 'text-rose-600' : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Home className="w-5 h-5 mb-0.5" />
+          <span>Home</span>
+        </Link>
+
+        <Link
+          to="/dashboard#history"
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl text-[10px] font-bold transition-colors ${
+            location.hash === '#history' ? 'text-rose-600' : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Clock className="w-5 h-5 mb-0.5" />
+          <span>Requests</span>
+        </Link>
+
+        {/* Center Floating SOS Button */}
+        <button
+          type="button"
+          onClick={onOpenSOS}
+          className="relative -top-4 w-13 h-13 p-3.5 rounded-full bg-gradient-to-tr from-red-600 to-rose-600 text-white shadow-xl shadow-rose-600/40 border-4 border-white flex items-center justify-center transform active:scale-90 transition-transform animate-pulse"
+          aria-label="Emergency SOS"
+        >
+          <AlertTriangle className="w-6 h-6 text-white" />
+        </button>
+
+        <Link
+          to="/helper-inbox"
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl text-[10px] font-bold transition-colors ${
+            location.pathname === '/helper-inbox' ? 'text-rose-600' : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Radio className="w-5 h-5 mb-0.5 text-emerald-600" />
+          <span>Inbox</span>
+        </Link>
+
+        <Link
+          to="/profile"
+          className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl text-[10px] font-bold transition-colors ${
+            location.pathname === '/profile' ? 'text-rose-600' : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <User className="w-5 h-5 mb-0.5" />
+          <span>Profile</span>
+        </Link>
+      </div>
     </header>
   );
 }
