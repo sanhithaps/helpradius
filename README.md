@@ -95,7 +95,7 @@ Help Radius features a secure, database-persisted authentication system:
 1. **User Registration**: First-time visitors register with Full Name, Email, Mobile Number, Password, and a mandatory **Verification ID Number** (Aadhaar, Voter ID, Driving License, Student ID, or Passport). Users can register as a **Requester** or a **Community Helper / Volunteer** and add custom emergency contacts.
 2. **Persistent Login**: Registered users log in with their Email or Mobile and Password. Account data, emergency contacts, and personal request history are verified and loaded from the persistent database.
 3. **Helper / Acceptor Role**: Users who register as a helper receive nearby requests in their **Helper Inbox**, accept requests with an atomic lock, and assist requesters via live tracking and private chat.
-4. **Administrator (`admin@helpradius.org` / `password123`)**: Accesses `/admin` to review volunteer verification credentials, certify helpers for personal safety, manage users, and view system audit logs.
+4. **Administrator**: Accesses `/admin` using credentials configured via `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `.env` to review volunteer verification credentials, certify helpers for personal safety, manage users, and view system audit logs.
 
 ---
 

@@ -1,7 +1,9 @@
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const config = require('../config');
 const db = require('../models/dataStore');
+const { toPublicUser } = require('../utils/userUtils');
 
 function generateToken(user) {
   return jwt.sign(
@@ -13,9 +15,11 @@ function generateToken(user) {
       isHelper: user.isHelper
     },
     config.jwtSecret,
-    { expiresIn: '7d' }
+    { expiresIn: config.jwtExpiresIn || '7d' }
   );
 }
+
+const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
 
 class AuthController {
   // Simulated OTP verification endpoint
@@ -64,8 +68,12 @@ class AuthController {
       return res.status(400).json({ error: 'ValidationError', message: 'Mobile phone number is required.' });
     }
 
-    if (!password || password.length < 4) {
-      return res.status(400).json({ error: 'ValidationError', message: 'Password must be at least 4 characters long.' });
+    // Password validation: at least 8 characters with letter and number
+    if (!password || !PASSWORD_REGEX.test(password)) {
+      return res.status(400).json({
+        error: 'ValidationError',
+        message: 'Password must be at least 8 characters long and contain at least one letter and one number.'
+      });
     }
 
     if (!verificationId || !verificationId.trim()) {
@@ -78,7 +86,7 @@ class AuthController {
     const cleanEmail = email.toLowerCase().trim();
     const cleanPhone = phone.trim();
 
-    // Check duplicate email
+    // Check duplicate email / phone
     for (const u of db.users.values()) {
       if (u.email && u.email.toLowerCase() === cleanEmail) {
         return res.status(400).json({
@@ -99,14 +107,23 @@ class AuthController {
 
     const wantsToBeHelper = Boolean(isHelper || role === 'helper');
 
+    // Secure ID handling: never store raw full ID number, mask to last 4
+    const cleanId = String(verificationId).replace(/[^a-zA-Z0-9]/g, '');
+    const last4 = cleanId.length >= 4 ? cleanId.slice(-4) : cleanId.padStart(4, 'X');
+    const idLast4 = `XXXX-XXXX-${last4}`;
+
+    // Hash password with bcryptjs
+    const passwordHash = await bcrypt.hash(password, 10);
+
     const newUser = {
       id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       name: name.trim(),
       email: cleanEmail,
       phone: cleanPhone,
-      password: password, // stored securely for login verification
-      verificationId: verificationId.trim(),
+      passwordHash,
+      idLast4,
       idType: idType || 'Government / National ID',
+      idVerified: false,
       role: wantsToBeHelper ? 'helper' : (role === 'admin' ? 'admin' : 'user'),
       isHelper: wantsToBeHelper,
       address: address ? address.trim() : 'Current Location',
@@ -121,6 +138,7 @@ class AuthController {
         locationGranted: permissions?.locationGranted !== false,
         notificationsGranted: permissions?.notificationsGranted !== false
       },
+      suspended: false,
       createdAt: new Date().toISOString()
     };
 
@@ -139,7 +157,7 @@ class AuthController {
         name: newUser.name,
         avatar: newUser.avatar,
         phone: newUser.phone,
-        verificationId: newUser.verificationId,
+        idLast4: newUser.idLast4,
         idType: newUser.idType,
         status: 'approved',
         safetyEligible: true,
@@ -154,7 +172,7 @@ class AuthController {
         },
         verification: {
           simulatedIdType: newUser.idType,
-          idNumber: newUser.verificationId,
+          idLast4: newUser.idLast4,
           submittedAt: new Date().toISOString(),
           reviewedBy: 'system_auto_verify',
           reviewedAt: new Date().toISOString(),
@@ -169,13 +187,13 @@ class AuthController {
     db.logAudit('USER_REGISTERED', newUser.id, {
       email: newUser.email,
       role: newUser.role,
-      verificationId: newUser.verificationId
+      idLast4: newUser.idLast4
     });
 
     const token = generateToken(newUser);
     return res.status(201).json({
       message: 'Account created and verified successfully',
-      user: newUser,
+      user: toPublicUser(newUser),
       helper: helperRecord,
       token
     });
@@ -186,12 +204,11 @@ class AuthController {
     const { email, phone, identifier, password } = req.body;
     const loginTarget = (identifier || email || phone || '').toLowerCase().trim();
 
-    if (!loginTarget) {
-      return res.status(400).json({ error: 'ValidationError', message: 'Email or mobile number is required.' });
-    }
-
-    if (!password) {
-      return res.status(400).json({ error: 'ValidationError', message: 'Password is required.' });
+    if (!loginTarget || !password) {
+      return res.status(400).json({
+        error: 'ValidationError',
+        message: 'Email/phone and password are required.'
+      });
     }
 
     let user = null;
@@ -206,18 +223,42 @@ class AuthController {
       }
     }
 
+    // Security requirement: Generic 401 error message for both unknown user and wrong password
+    // to prevent email enumeration attacks
     if (!user) {
-      return res.status(404).json({
-        error: 'UserNotFound',
-        message: 'No registered account found with this email or mobile number. Please register first.'
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Invalid email/phone or password'
       });
     }
 
-    // Verify Password against stored registration password
-    if (user.password && user.password !== password) {
+    // Check account suspension
+    if (user.suspended || user.isSuspended) {
+      return res.status(403).json({
+        error: 'AccountSuspended',
+        message: 'Your account has been suspended by an administrator.'
+      });
+    }
+
+    // Verify Password against stored bcrypt hash
+    let passwordValid = false;
+    if (user.passwordHash) {
+      passwordValid = await bcrypt.compare(password, user.passwordHash);
+    } else if (user.password) {
+      // Legacy user migration on first login
+      if (user.password === password) {
+        passwordValid = true;
+        user.passwordHash = await bcrypt.hash(password, 10);
+        delete user.password;
+        db.users.set(user.id, user);
+        db.saveUsers();
+      }
+    }
+
+    if (!passwordValid) {
       return res.status(401).json({
-        error: 'InvalidCredentials',
-        message: 'Incorrect password. Please enter the password you registered with.'
+        error: 'Unauthorized',
+        message: 'Invalid email/phone or password'
       });
     }
 
@@ -225,7 +266,7 @@ class AuthController {
     const token = generateToken(user);
     return res.json({
       message: 'Logged in successfully',
-      user,
+      user: toPublicUser(user),
       helper,
       token
     });
@@ -239,7 +280,7 @@ class AuthController {
     }
     const helper = db.helpers.get(user.id);
     return res.json({
-      user,
+      user: toPublicUser(user),
       helper: helper || null
     });
   }
@@ -249,52 +290,62 @@ class AuthController {
     const user = db.users.get(req.user.id);
     if (!user) return res.status(404).json({ error: 'NotFound' });
 
-    const { name, phone, avatar, address, verificationId, permissions } = req.body;
+    const { name, phone, avatar, address, verificationId, permissions, password } = req.body;
     if (name) user.name = name.trim();
     if (phone) user.phone = phone.trim();
     if (avatar) user.avatar = avatar;
     if (address) user.address = address.trim();
-    if (verificationId) user.verificationId = verificationId.trim();
+    if (verificationId) {
+      const clean = String(verificationId).replace(/[^a-zA-Z0-9]/g, '');
+      const last4 = clean.length >= 4 ? clean.slice(-4) : clean.padStart(4, 'X');
+      user.idLast4 = `XXXX-XXXX-${last4}`;
+      delete user.verificationId;
+    }
     if (permissions) user.permissions = { ...user.permissions, ...permissions };
+    if (password && PASSWORD_REGEX.test(password)) {
+      user.passwordHash = await bcrypt.hash(password, 10);
+      delete user.password;
+    }
 
     db.users.set(user.id, user);
     db.saveUsers();
-    return res.json({ message: 'Profile updated', user });
+
+    return res.json({
+      message: 'Profile updated successfully',
+      user: toPublicUser(user)
+    });
   }
 
-  // Emergency contacts CRUD
+  // Emergency contacts endpoints
   async getEmergencyContacts(req, res) {
     const user = db.users.get(req.user.id);
     if (!user) return res.status(404).json({ error: 'NotFound' });
-    return res.json({
-      contacts: user.emergencyContacts || [],
-      count: (user.emergencyContacts || []).length,
-      maxAllowed: 6
-    });
+    return res.json({ emergencyContacts: user.emergencyContacts || [] });
   }
 
   async addEmergencyContact(req, res) {
     const user = db.users.get(req.user.id);
     if (!user) return res.status(404).json({ error: 'NotFound' });
 
+    const { name, phone, relationship, email } = req.body;
+    if (!name || !phone) {
+      return res.status(400).json({ error: 'ValidationError', message: 'Contact name and phone are required.' });
+    }
+
     user.emergencyContacts = user.emergencyContacts || [];
     if (user.emergencyContacts.length >= 6) {
       return res.status(400).json({
-        error: 'LimitExceeded',
-        message: 'Maximum limit of 6 emergency contacts reached. Please remove one before adding.'
+        error: 'LimitReached',
+        message: 'Maximum limit of 6 emergency contacts reached. Please remove one before adding another.'
       });
-    }
-
-    const { name, phone, relationship } = req.body;
-    if (!name || !phone) {
-      return res.status(400).json({ error: 'ValidationError', message: 'Contact name and mobile number are required.' });
     }
 
     const newContact = {
       id: uuidv4(),
       name: name.trim(),
       phone: phone.trim(),
-      relationship: relationship || 'Emergency Contact'
+      relationship: relationship ? relationship.trim() : 'Family',
+      email: email ? email.trim() : null
     };
 
     user.emergencyContacts.push(newContact);
@@ -304,8 +355,7 @@ class AuthController {
     return res.status(201).json({
       message: 'Emergency contact added',
       contact: newContact,
-      count: user.emergencyContacts.length,
-      maxAllowed: 6
+      emergencyContacts: user.emergencyContacts
     });
   }
 
@@ -319,8 +369,8 @@ class AuthController {
     db.saveUsers();
 
     return res.json({
-      message: 'Contact removed',
-      count: user.emergencyContacts.length
+      message: 'Emergency contact removed',
+      emergencyContacts: user.emergencyContacts
     });
   }
 }

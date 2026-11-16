@@ -9,10 +9,17 @@
     "test": "node --test test/*.test.js",
     "seed": "node scripts/seedHelpers.js"
   },
-  "keywords": ["emergency", "sos", "community-help", "geofencing", "webrtc"],
+  "keywords": [
+    "emergency",
+    "sos",
+    "community-help",
+    "geofencing",
+    "webrtc"
+  ],
   "author": "Help Radius Team",
   "license": "MIT",
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",

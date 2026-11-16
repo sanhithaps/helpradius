@@ -1,10 +1,27 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../../.env') });
+
+const jwtSecret = process.env.JWT_SECRET || 'help-radius-secure-dev-secret-key-2026-minimum-32-chars';
+
+if (!jwtSecret || jwtSecret.length < 32) {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('FATAL: JWT_SECRET must be at least 32 characters in production. Server refused to start.');
+  } else {
+    console.warn('\n⚠️  [SECURITY WARNING] JWT_SECRET is missing or shorter than 32 characters!');
+    console.warn('⚠️  Generate a secure secret using: node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'hex\'))"\n');
+  }
+}
 
 const config = {
   port: parseInt(process.env.PORT || '5000', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
-  jwtSecret: process.env.JWT_SECRET || 'help-radius-secure-dev-secret-key-2026',
-  corsOrigin: process.env.CORS_ORIGIN || '*',
+  jwtSecret,
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
+  clientOrigins: process.env.CLIENT_ORIGINS 
+    ? process.env.CLIENT_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
+    : ['http://localhost:5173', 'http://localhost:8080', 'http://127.0.0.1:5173'],
+  adminEmail: process.env.ADMIN_EMAIL || '',
+  adminPassword: process.env.ADMIN_PASSWORD || '',
   smsProvider: process.env.SMS_PROVIDER || 'simulated',
   firebaseProjectId: process.env.FIREBASE_PROJECT_ID || 'help-radius-prototype',
   

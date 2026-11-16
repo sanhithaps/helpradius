@@ -200,8 +200,9 @@ export function RegisterPage() {
       setErrorMessage('Please enter your Verification ID number (e.g. Aadhaar / Voter ID / Student ID).');
       return;
     }
-    if (!password || password.length < 4) {
-      setErrorMessage('Password must be at least 4 characters long.');
+    const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
+    if (!password || !passwordRegex.test(password)) {
+      setErrorMessage('Password must be at least 8 characters long and contain at least one letter and one number.');
       return;
     }
     if (password !== confirmPassword) {
@@ -481,6 +482,11 @@ export function RegisterPage() {
                   />
                 </div>
               </div>
+
+              <div className="flex items-start gap-2 pt-1 text-[11px] text-slate-500">
+                <input type="checkbox" defaultChecked required className="mt-0.5 rounded text-rose-600 focus:ring-rose-500" />
+                <span>My ID is used only for manual helper verification; only the last 4 digits are stored.</span>
+              </div>
             </div>
 
             {/* Password & Confirm Password */}
@@ -492,7 +498,7 @@ export function RegisterPage() {
                 <div className="relative">
                   <input
                     type="password"
-                    placeholder="At least 4 characters"
+                    placeholder="Min 8 chars (letters & numbers)"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full p-3.5 pl-10 rounded-2xl border border-slate-200 text-sm outline-none focus:border-rose-500"
@@ -654,7 +660,7 @@ export function RegisterPage() {
                 <div><strong>Full Name:</strong> {name}</div>
                 <div><strong>Email:</strong> {email}</div>
                 <div><strong>Mobile:</strong> {phone}</div>
-                <div><strong>Verification ID:</strong> {verificationId} ({idType})</div>
+                <div><strong>Verification ID:</strong> {`XXXX-XXXX-${verificationId.slice(-4)}`} ({idType})</div>
                 <div><strong>Account Role:</strong> {accountType === 'helper' ? 'Volunteer Helper' : 'Community Requester'}</div>
                 <div><strong>Primary Emergency Contact:</strong> {contactName ? `${contactName} (${contactPhone}) - ${contactRelation}` : 'None added (can add anytime in Profile)'}</div>
               </div>

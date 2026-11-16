@@ -4,7 +4,7 @@ const db = require('../models/dataStore');
 
 /**
  * Authentication Middleware:
- * Supports Bearer tokens (JWT) and falls back to demo user headers for effortless testing.
+ * Verifies Bearer JWT tokens and checks account status.
  */
 function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -18,7 +18,6 @@ function requireAuth(req, res, next) {
   const token = authHeader.split(' ')[1];
 
   try {
-    // 1. Verify prototype JWT or Firebase token
     const decoded = jwt.verify(token, config.jwtSecret);
     const user = db.users.get(decoded.id || decoded.uid);
 
@@ -29,13 +28,21 @@ function requireAuth(req, res, next) {
       });
     }
 
+    // Check account suspension
+    if (user.suspended || user.isSuspended) {
+      return res.status(403).json({
+        error: 'AccountSuspended',
+        message: 'Your account has been suspended by an administrator.'
+      });
+    }
+
     req.user = {
       id: user.id,
       uid: user.id,
       email: user.email,
       name: user.name,
-      role: user.role,
-      isHelper: user.isHelper
+      role: user.role || 'user',
+      isHelper: Boolean(user.isHelper)
     };
     next();
   } catch (err) {
@@ -48,7 +55,7 @@ function requireAuth(req, res, next) {
 
 /**
  * Admin Role Guard:
- * Only allows users with role === 'admin' (Custom Claim)
+ * Strictly allows users with role === 'admin'
  */
 function requireAdmin(req, res, next) {
   if (!req.user || req.user.role !== 'admin') {
@@ -61,8 +68,7 @@ function requireAdmin(req, res, next) {
 }
 
 /**
- * Optional Auth Middleware:
- * Attaches user if valid token present, otherwise proceeds unauthenticated.
+ * Optional Auth Middleware
  */
 function optionalAuth(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -71,14 +77,14 @@ function optionalAuth(req, res, next) {
     try {
       const decoded = jwt.verify(token, config.jwtSecret);
       const user = db.users.get(decoded.id || decoded.uid);
-      if (user) {
+      if (user && !user.suspended && !user.isSuspended) {
         req.user = {
           id: user.id,
           uid: user.id,
           email: user.email,
           name: user.name,
-          role: user.role,
-          isHelper: user.isHelper
+          role: user.role || 'user',
+          isHelper: Boolean(user.isHelper)
         };
       }
     } catch (e) {

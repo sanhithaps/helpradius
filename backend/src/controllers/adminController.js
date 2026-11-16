@@ -1,5 +1,6 @@
 const db = require('../models/dataStore');
 const config = require('../config');
+const { toPublicUser } = require('../utils/userUtils');
 
 class AdminController {
   // Overview Dashboard Metrics
@@ -103,7 +104,7 @@ class AdminController {
         const q = query.toLowerCase();
         if (!u.name.toLowerCase().includes(q) && !u.email.toLowerCase().includes(q)) continue;
       }
-      usersList.push(u);
+      usersList.push(toPublicUser(u));
     }
 
     return res.json({ users: usersList });
@@ -120,9 +121,10 @@ class AdminController {
     user.suspended = Boolean(suspended);
     user.suspensionReason = reason || null;
     db.users.set(userId, user);
+    db.saveUsers();
 
     db.logAudit('USER_SUSPENSION_TOGGLED', req.user.id, { userId, suspended: user.suspended });
-    return res.json({ message: `User ${user.suspended ? 'suspended' : 'reinstated'}`, user });
+    return res.json({ message: `User ${user.suspended ? 'suspended' : 'reinstated'}`, user: toPublicUser(user) });
   }
 
   // Get Reports

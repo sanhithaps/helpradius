@@ -179,6 +179,19 @@ class RequestController {
       return res.status(404).json({ error: 'NotFound', message: 'Request not found.' });
     }
 
+    const userId = req.user.id;
+    const isRequester = request.requesterId === userId;
+    const isAcceptedHelper = request.acceptedHelperId === userId;
+    const isAdmin = req.user.role === 'admin';
+    const isSearchingNearby = request.status === 'searching' && req.user.isHelper;
+
+    if (!isRequester && !isAcceptedHelper && !isAdmin && !isSearchingNearby) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You are not authorized to view this request.'
+      });
+    }
+
     let helperInfo = null;
     if (request.acceptedHelperId) {
       const helper = db.helpers.get(request.acceptedHelperId);

@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
+const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
+const config = require('../config');
 
 const DATA_DIR = path.join(__dirname, '../../data');
 
@@ -18,6 +20,9 @@ class DataStore {
     this.notifiedHelperIndex = new Map();
     this.contactAlerts = new Map();
 
+    // Promise chain queue to serialize asynchronous disk persistence safely
+    this._writeQueue = Promise.resolve();
+
     this.ensureDataDir();
     this.loadData();
   }
@@ -30,6 +35,37 @@ class DataStore {
     } catch (e) {
       console.warn('[DATASTORE] Could not create data directory:', e.message);
     }
+  }
+
+  /**
+   * Safe Atomic File Write:
+   * Writes data to a temporary file first, then synchronously renames it over the target.
+   * This guarantees that a sudden crash or interruption will never corrupt existing JSON data.
+   */
+  _atomicWriteSync(targetPath, dataString) {
+    this.ensureDataDir();
+    const tempPath = `${targetPath}.tmp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    try {
+      fs.writeFileSync(tempPath, dataString, 'utf8');
+      fs.renameSync(tempPath, targetPath);
+    } catch (err) {
+      if (fs.existsSync(tempPath)) {
+        try { fs.unlinkSync(tempPath); } catch (_) {}
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Queue write operations sequentially to prevent race conditions during high concurrency.
+   */
+  _enqueueWrite(operation) {
+    this._writeQueue = this._writeQueue
+      .then(() => operation())
+      .catch(err => {
+        console.error('[DATASTORE] Queued write operation failed:', err.message);
+      });
+    return this._writeQueue;
   }
 
   loadData() {
@@ -89,71 +125,89 @@ class DataStore {
       console.warn('[DATASTORE] Error loading saved database files, initializing fresh:', err.message);
     }
 
-    // Always ensure System Admin account exists in the database
-    if (!this.users.has('usr_admin_001')) {
-      const adminUser = {
-        id: 'usr_admin_001',
-        name: 'System Admin',
-        email: 'admin@helpradius.org',
-        phone: '+919876543210',
-        password: 'password123',
-        verificationId: 'GOV-ADM-001',
-        idType: 'Government System Administrator ID',
-        role: 'admin',
-        isHelper: false,
-        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-        createdAt: new Date().toISOString(),
-        emergencyContacts: []
-      };
-      this.users.set(adminUser.id, adminUser);
-      this.saveUsers();
+    // Initialize Admin account from environment variables if no admin currently exists
+    const hasAdmin = Array.from(this.users.values()).some(u => u.role === 'admin');
+    if (!hasAdmin) {
+      if (config.adminEmail && config.adminPassword) {
+        const adminId = 'usr_admin_001';
+        const adminUser = {
+          id: adminId,
+          name: 'System Administrator',
+          email: config.adminEmail.toLowerCase().trim(),
+          phone: '+919876543210',
+          passwordHash: bcrypt.hashSync(config.adminPassword, 10),
+          idType: 'Government / System Administrator Credential',
+          idLast4: 'XXXX-XXXX-0001',
+          idVerified: true,
+          role: 'admin',
+          isHelper: false,
+          avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+          createdAt: new Date().toISOString(),
+          emergencyContacts: []
+        };
+        this.users.set(adminId, adminUser);
+        this.saveUsers();
+        console.log(`[DATASTORE] Initialized Admin account for: ${adminUser.email}`);
+      } else {
+        console.log('[DATASTORE] No administrator account found. Set ADMIN_EMAIL and ADMIN_PASSWORD in .env to initialize one.');
+      }
     }
   }
 
   saveUsers() {
-    try {
-      this.ensureDataDir();
-      const usersPath = path.join(DATA_DIR, 'users.json');
-      fs.writeFileSync(usersPath, JSON.stringify(Array.from(this.users.entries()), null, 2), 'utf8');
-    } catch (e) {
-      console.error('[DATASTORE] Error saving users to disk:', e.message);
-    }
+    return this._enqueueWrite(() => {
+      try {
+        const usersPath = path.join(DATA_DIR, 'users.json');
+        const data = JSON.stringify(Array.from(this.users.entries()), null, 2);
+        this._atomicWriteSync(usersPath, data);
+      } catch (e) {
+        console.error('[DATASTORE] Error saving users to disk:', e.message);
+      }
+    });
   }
 
   saveHelpers() {
-    try {
-      this.ensureDataDir();
-      const helpersPath = path.join(DATA_DIR, 'helpers.json');
-      fs.writeFileSync(helpersPath, JSON.stringify(Array.from(this.helpers.entries()), null, 2), 'utf8');
-    } catch (e) {
-      console.error('[DATASTORE] Error saving helpers to disk:', e.message);
-    }
+    return this._enqueueWrite(() => {
+      try {
+        const helpersPath = path.join(DATA_DIR, 'helpers.json');
+        const data = JSON.stringify(Array.from(this.helpers.entries()), null, 2);
+        this._atomicWriteSync(helpersPath, data);
+      } catch (e) {
+        console.error('[DATASTORE] Error saving helpers to disk:', e.message);
+      }
+    });
   }
 
   saveRequests() {
-    try {
-      this.ensureDataDir();
-      const requestsPath = path.join(DATA_DIR, 'requests.json');
-      fs.writeFileSync(requestsPath, JSON.stringify(Array.from(this.requests.entries()), null, 2), 'utf8');
-    } catch (e) {
-      console.error('[DATASTORE] Error saving requests to disk:', e.message);
-    }
+    return this._enqueueWrite(() => {
+      try {
+        const requestsPath = path.join(DATA_DIR, 'requests.json');
+        const data = JSON.stringify(Array.from(this.requests.entries()), null, 2);
+        this._atomicWriteSync(requestsPath, data);
+      } catch (e) {
+        console.error('[DATASTORE] Error saving requests to disk:', e.message);
+      }
+    });
   }
 
   saveChats() {
-    try {
-      this.ensureDataDir();
-      const chatsPath = path.join(DATA_DIR, 'chats.json');
-      fs.writeFileSync(chatsPath, JSON.stringify(Array.from(this.chats.entries()), null, 2), 'utf8');
-    } catch (e) {}
+    return this._enqueueWrite(() => {
+      try {
+        const chatsPath = path.join(DATA_DIR, 'chats.json');
+        const data = JSON.stringify(Array.from(this.chats.entries()), null, 2);
+        this._atomicWriteSync(chatsPath, data);
+      } catch (e) {}
+    });
   }
 
   saveMessages() {
-    try {
-      this.ensureDataDir();
-      const messagesPath = path.join(DATA_DIR, 'messages.json');
-      fs.writeFileSync(messagesPath, JSON.stringify(Array.from(this.messages.entries()), null, 2), 'utf8');
-    } catch (e) {}
+    return this._enqueueWrite(() => {
+      try {
+        const messagesPath = path.join(DATA_DIR, 'messages.json');
+        const data = JSON.stringify(Array.from(this.messages.entries()), null, 2);
+        this._atomicWriteSync(messagesPath, data);
+      } catch (e) {}
+    });
   }
 
   relocateSeedHelpersAround(lat, lng) {

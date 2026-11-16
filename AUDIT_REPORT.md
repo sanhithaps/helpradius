@@ -194,7 +194,6 @@ cd frontend
 npm run dev -- --host --port 5173
 ```
 
-### Testing Accounts Available in Database:
-- **Admin**: `admin@helpradius.org` / `password123`
-- **Registered User**: `chotipatre369@gmail.com` / `sanhitha` (Verification ID: `2025cs0433`)
+### Testing Accounts:
+- **Admin**: Configured in `backend/.env` (`ADMIN_EMAIL` and `ADMIN_PASSWORD`).
 - **New Registration**: Open [http://localhost:5173/register](http://localhost:5173/register) to create any new Requester or Volunteer account.

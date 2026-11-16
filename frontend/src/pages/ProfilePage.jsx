@@ -130,9 +130,9 @@ export default function ProfilePage() {
             </span>
           </div>
           <p className="text-xs text-slate-500">{user?.email} • {user?.phone}</p>
-          {user?.verificationId && (
+          {(user?.idLast4 || user?.verificationId) && (
             <p className="text-xs font-mono text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-lg inline-block mt-1 border border-emerald-200">
-              Verified ID: {user.verificationId} ({user.idType || 'Government ID'})
+              Verified ID: {user.idLast4 || user.verificationId} ({user.idType || 'Government ID'})
             </p>
           )}
         </div>

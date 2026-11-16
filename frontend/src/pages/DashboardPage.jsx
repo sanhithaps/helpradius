@@ -64,9 +64,9 @@ export default function DashboardPage({ onOpenSOS }) {
             <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border">
               {user?.role === 'admin' ? 'Administrator' : (user?.isHelper ? 'Volunteer Helper' : 'Community Requester')}
             </span>
-            {user?.verificationId && (
+            {(user?.idLast4 || user?.verificationId) && (
               <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-mono">
-                ID: {user.verificationId} ({user.idType || 'Verified'})
+                ID: {user.idLast4 || user.verificationId} ({user.idType || 'Verified'})
               </span>
             )}
           </h1>
