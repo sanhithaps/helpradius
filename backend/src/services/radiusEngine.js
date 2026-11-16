@@ -82,7 +82,7 @@ class RadiusEngine {
     try {
       const now = Date.now();
       for (const [requestId, request] of db.requests.entries()) {
-        if (request.status !== 'searching') continue;
+        if (request.status !== 'searching' && request.status !== 'scheduled') continue;
 
         if (request.nextCheckAt && now >= request.nextCheckAt) {
           const categoryConfig = this.getRadiusConfig(request.type);

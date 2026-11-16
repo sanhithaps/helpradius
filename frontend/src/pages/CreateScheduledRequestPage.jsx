@@ -74,25 +74,28 @@ export default function CreateScheduledRequestPage() {
 
     setSubmitting(true);
     try {
+      const targetLat = (location && typeof location.lat === 'number') ? location.lat : (userLocation?.lat || 12.9716);
+      const targetLng = (location && typeof location.lng === 'number') ? location.lng : (userLocation?.lng || 77.5946);
+
       const res = await api.post('/requests', {
         type: 'scheduled',
         category,
-        description,
+        description: description.trim(),
         scheduledFor,
-        expectedDurationMin: Number(expectedDurationMin),
-        meetingLocation: meetingLocationText,
+        expectedDurationMin: Number(expectedDurationMin) || 60,
+        meetingLocation: meetingLocationText || 'Meeting Point',
         location: {
-          lat: location.lat,
-          lng: location.lng,
-          address: meetingLocationText
+          lat: targetLat,
+          lng: targetLng,
+          address: meetingLocationText || 'Meeting Location'
         },
-        voluntaryReward: Number(voluntaryReward)
+        voluntaryReward: Number(voluntaryReward) || 0
       });
 
       navigate(`/requests/${res.data.request.id}`);
     } catch (err) {
       console.error('Failed to create scheduled request', err);
-      alert('Could not create scheduled request. Please try again.');
+      alert(err.response?.data?.message || 'Could not create scheduled request. Please try again.');
       setSubmitting(false);
     }
   };

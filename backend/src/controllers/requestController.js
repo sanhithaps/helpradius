@@ -190,7 +190,7 @@ class RequestController {
     const isRequester = request.requesterId === userId;
     const isAcceptedHelper = request.acceptedHelperId === userId;
     const isAdmin = req.user.role === 'admin';
-    const isSearchingNearby = request.status === 'searching' && req.user.isHelper;
+    const isSearchingNearby = (request.status === 'searching' || request.status === 'scheduled') && req.user.isHelper;
 
     if (!isRequester && !isAcceptedHelper && !isAdmin && !isSearchingNearby) {
       return res.status(403).json({

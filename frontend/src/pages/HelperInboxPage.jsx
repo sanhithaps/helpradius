@@ -77,7 +77,7 @@ export default function HelperInboxPage() {
 
   // Real-time Event: Request Updated/Expired/Completed
   useSocketEvent('request:updated', (data) => {
-    if (data.request?.status !== 'searching') {
+    if (data.request?.status !== 'searching' && data.request?.status !== 'scheduled') {
       setInboxRequests((prev) => prev.filter((r) => r.id !== data.request.id));
     }
   });

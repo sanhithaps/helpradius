@@ -177,7 +177,8 @@ export default function ActiveRequestPage() {
   }
 
   const isEmergency = request.type === 'emergency';
-  const isSearching = request.status === 'searching';
+  const isScheduled = request.type === 'scheduled';
+  const isSearching = request.status === 'searching' || (isScheduled && request.status === 'scheduled');
   const isAcceptedOrActive = ['accepted', 'in_progress'].includes(request.status);
   const isCompleted = request.status === 'completed';
   const isCancelled = request.status === 'cancelled';

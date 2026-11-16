@@ -89,7 +89,7 @@ function initIO(httpServer) {
       const isRequester = request.requesterId === userId;
       const isAcceptedHelper = request.acceptedHelperId === userId;
       const isAdmin = socket.user.role === 'admin';
-      const isSearchingHelper = request.status === 'searching' && socket.user.isHelper;
+      const isSearchingHelper = (request.status === 'searching' || request.status === 'scheduled') && socket.user.isHelper;
 
       if (!isRequester && !isAcceptedHelper && !isAdmin && !isSearchingHelper) {
         if (callback) callback({ error: 'Forbidden', message: 'Not authorized for this request room.' });
