@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useSocket, useSocketEvent } from '../context/SocketContext';
 import VoiceNoteRecorder from '../components/VoiceNoteRecorder';
 import VoiceCallModal from '../components/VoiceCallModal';
 import api from '../services/api';
@@ -21,6 +22,7 @@ import {
 export default function ChatPage() {
   const { id } = useParams(); // requestId
   const { user } = useAuth();
+  const { socket, isConnected } = useSocket();
   const navigate = useNavigate();
 
   const [chat, setChat] = useState(null);
@@ -30,9 +32,12 @@ export default function ChatPage() {
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
   const [callModalOpen, setCallModalOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [typingUser, setTypingUser] = useState(null);
 
   const messagesEndRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
 
+  // Initial load via REST
   const fetchChat = async () => {
     try {
       const res = await api.get(`/chats/${id}/messages`);
@@ -47,24 +52,109 @@ export default function ChatPage() {
 
   useEffect(() => {
     fetchChat();
-    const interval = setInterval(fetchChat, 2500);
-    return () => clearInterval(interval);
   }, [id]);
 
+  // Join Socket Request Room
+  useEffect(() => {
+    if (!socket || !id) return;
+    socket.emit('request:join', { requestId: id });
+    socket.emit('chat:read', { requestId: id });
+
+    return () => {
+      socket.emit('request:leave', { requestId: id });
+    };
+  }, [socket, id]);
+
+  // Real-time Event: Incoming Message
+  useSocketEvent('chat:message', (data) => {
+    if (data.requestId === id) {
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === data.message.id)) return prev;
+        return [...prev, data.message];
+      });
+      // Mark read if it's from the other person
+      if (data.message.senderId !== user?.id) {
+        socket?.emit('chat:read', { requestId: id });
+      }
+    }
+  });
+
+  // Real-time Event: Typing Indicator
+  useSocketEvent('chat:typing', (data) => {
+    if (data.requestId === id && data.userId !== user?.id) {
+      setTypingUser(data.isTyping ? data.userName : null);
+    }
+  });
+
+  // Real-time Event: Messages Read
+  useSocketEvent('chat:read', (data) => {
+    if (data.requestId === id) {
+      setMessages((prev) =>
+        prev.map((m) => ({
+          ...m,
+          readBy: Array.from(new Set([...(m.readBy || []), data.readerId]))
+        }))
+      );
+    }
+  });
+
+  // Real-time Event: Request updated/locked
+  useSocketEvent('request:updated', (data) => {
+    if (data.request?.id === id && (data.request.status === 'completed' || data.request.status === 'cancelled')) {
+      setChat((prev) => (prev ? { ...prev, active: false } : null));
+    }
+  });
+
+  // Auto-scroll on new message
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, typingUser]);
+
+  const handleTyping = (text) => {
+    setInputText(text);
+    if (!socket) return;
+
+    socket.emit('chat:typing', { requestId: id, isTyping: true });
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      socket.emit('chat:typing', { requestId: id, isTyping: false });
+    }, 2000);
+  };
 
   const handleSendMessage = async (customPayload) => {
     const payload = customPayload || { text: inputText };
     if (!payload.text && !payload.media) return;
 
-    try {
-      await api.post(`/chats/${id}/messages`, payload);
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    socket?.emit('chat:typing', { requestId: id, isTyping: false });
+
+    // Try sending over socket for zero latency
+    if (socket && isConnected) {
+      socket.emit(
+        'chat:send',
+        {
+          requestId: id,
+          text: payload.text,
+          type: payload.type || 'text',
+          mediaUrl: payload.media?.url || null
+        },
+        (response) => {
+          if (response?.error) {
+            // Fallback to REST API if socket handler rejected
+            api.post(`/chats/${id}/messages`, payload).catch(console.error);
+          }
+        }
+      );
       setInputText('');
-      fetchChat();
-    } catch (e) {
-      alert(e.response?.data?.message || 'Could not send message.');
+    } else {
+      // Fallback to REST
+      try {
+        await api.post(`/chats/${id}/messages`, payload);
+        setInputText('');
+        fetchChat();
+      } catch (e) {
+        alert(e.response?.data?.message || 'Could not send message.');
+      }
     }
   };
 
@@ -95,7 +185,7 @@ export default function ChatPage() {
     try {
       await api.post(`/chats/${id}/report`, {
         reason,
-        reportedUserId: chat?.participants?.find(p => p !== user?.id)
+        reportedUserId: chat?.participants?.find((p) => p !== user?.id)
       });
       alert('Report submitted to safety moderators. Thank you.');
       setMenuOpen(false);
@@ -131,9 +221,9 @@ export default function ChatPage() {
             </div>
             <div>
               <h3 className="font-bold text-sm leading-tight">Assistance Chat</h3>
-              <p className="text-[11px] text-emerald-400 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                <span>Encrypted • No Phone Numbers Shared</span>
+              <p className="text-[11px] text-emerald-400 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Real-Time Encrypted • Zero Phone Numbers Exposed</span>
               </p>
             </div>
           </div>
@@ -142,10 +232,11 @@ export default function ChatPage() {
             {!isLocked && (
               <button
                 onClick={() => setCallModalOpen(true)}
-                className="p-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                className="p-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center gap-1.5 text-xs font-bold"
                 title="In-App Voice Call"
               >
                 <Phone className="w-4 h-4" />
+                <span className="hidden sm:inline">Call</span>
               </button>
             )}
 
@@ -176,6 +267,7 @@ export default function ChatPage() {
           {messages.map((msg) => {
             const isMe = msg.senderId === user?.id;
             const isSystem = msg.type === 'system';
+            const isRead = msg.readBy && msg.readBy.length > 1;
 
             if (isSystem) {
               return (
@@ -189,11 +281,13 @@ export default function ChatPage() {
 
             return (
               <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[80%] rounded-2xl p-3.5 space-y-1 shadow-sm ${
-                  isMe
-                    ? 'bg-rose-600 text-white rounded-tr-none'
-                    : 'bg-white text-slate-900 border border-slate-200 rounded-tl-none'
-                }`}>
+                <div
+                  className={`max-w-[80%] rounded-2xl p-3.5 space-y-1 shadow-sm ${
+                    isMe
+                      ? 'bg-rose-600 text-white rounded-tr-none'
+                      : 'bg-white text-slate-900 border border-slate-200 rounded-tl-none'
+                  }`}
+                >
                   <span className={`block text-[10px] font-bold ${isMe ? 'text-rose-200' : 'text-slate-500'}`}>
                     {msg.senderName}
                   </span>
@@ -214,21 +308,44 @@ export default function ChatPage() {
                     </div>
                   )}
 
-                  <div className={`flex items-center justify-end gap-1 text-[9px] pt-1 ${isMe ? 'text-rose-200' : 'text-slate-400'}`}>
+                  <div
+                    className={`flex items-center justify-end gap-1 text-[9px] pt-1 ${
+                      isMe ? 'text-rose-200' : 'text-slate-400'
+                    }`}
+                  >
                     <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                    {isMe && <CheckCheck className="w-3 h-3 text-rose-200" />}
+                    {isMe && (
+                      isRead ? (
+                        <CheckCheck className="w-3.5 h-3.5 text-sky-300" title="Read" />
+                      ) : (
+                        <Check className="w-3.5 h-3.5 text-rose-200" title="Sent" />
+                      )
+                    )}
                   </div>
                 </div>
               </div>
             );
           })}
+
+          {/* Typing Indicator */}
+          {typingUser && (
+            <div className="flex justify-start">
+              <div className="bg-white border border-slate-200 text-slate-500 text-xs px-3.5 py-2 rounded-2xl rounded-tl-none flex items-center gap-1.5 shadow-sm">
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" />
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce delay-100" />
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce delay-200" />
+                <span className="text-[11px] font-medium ml-1">{typingUser} is typing...</span>
+              </div>
+            </div>
+          )}
+
           <div ref={messagesEndRef} />
         </div>
 
         {/* Quick Reply Chips */}
         {!isLocked && (
           <div className="px-4 py-2 bg-white border-t border-slate-100 flex items-center gap-2 overflow-x-auto text-xs">
-            {["I'm on my way!", "Where are you exactly?", "I have reached the location."].map((quick, i) => (
+            {["I'm on my way!", 'Where are you exactly?', 'I have reached the location.'].map((quick, i) => (
               <button
                 key={i}
                 type="button"
@@ -273,15 +390,15 @@ export default function ChatPage() {
             <input
               type="text"
               value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
+              onChange={(e) => handleTyping(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
               placeholder="Type encrypted message..."
-              className="flex-1 p-3 rounded-2xl bg-slate-100 border border-slate-200 text-sm outline-none focus:border-rose-500"
+              className="flex-1 p-3 rounded-2xl bg-slate-100 border border-slate-200 text-sm outline-none focus:border-rose-500 font-medium"
             />
             <button
               type="button"
               onClick={() => handleSendMessage()}
-              className="p-3 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white shadow-md"
+              className="p-3 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white shadow-md active:scale-95 transition-all"
             >
               <Send className="w-4 h-4" />
             </button>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useSocketEvent } from '../context/SocketContext';
 import api from '../services/api';
 import {
   AlertTriangle,
@@ -41,9 +42,11 @@ export default function DashboardPage({ onOpenSOS }) {
 
   useEffect(() => {
     fetchRequests();
-    const interval = setInterval(fetchRequests, 5000);
-    return () => clearInterval(interval);
   }, []);
+
+  useSocketEvent('request:updated', () => {
+    fetchRequests();
+  });
 
   if (!user && !loading) {
     return <Navigate to="/register" replace />;

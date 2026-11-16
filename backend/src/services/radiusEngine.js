@@ -2,6 +2,7 @@ const db = require('../models/dataStore');
 const config = require('../config');
 const matchingService = require('./matchingService');
 const notificationService = require('./notificationService');
+const { emitTo } = require('../realtime/io');
 
 class RadiusEngine {
   constructor() {
@@ -11,7 +12,7 @@ class RadiusEngine {
 
   start() {
     if (this.workerInterval) return;
-    console.log('[RADIUS ENGINE] Background worker initialized. Polling active requests every 3 seconds.');
+    console.log('[RADIUS ENGINE] Background worker initialized. Checking active requests.');
     this.workerInterval = setInterval(() => {
       this.evaluateActiveRequests();
     }, 3000);
@@ -25,10 +26,24 @@ class RadiusEngine {
   }
 
   /**
+   * Helper to retrieve radius configuration with DEMO_FAST_RADIUS override support
+   */
+  getRadiusConfig(type) {
+    const base = config.radiusConfig[type] || config.radiusConfig.general;
+    if (process.env.DEMO_FAST_RADIUS === 'true') {
+      return {
+        ...base,
+        waitSec: [15, 20, 30, 45]
+      };
+    }
+    return base;
+  }
+
+  /**
    * Initialize expansion on a brand new request.
    */
   async initializeRequestExpansion(request) {
-    const categoryConfig = config.radiusConfig[request.type] || config.radiusConfig.general;
+    const categoryConfig = this.getRadiusConfig(request.type);
     const initialRadiusKm = categoryConfig.stepsKm[0];
     const initialWaitSec = categoryConfig.waitSec[0];
 
@@ -49,6 +64,12 @@ class RadiusEngine {
 
     // Search and notify for initial radius step (Step 0)
     await this.expandAndNotify(request);
+
+    // Live Socket broadcast
+    try {
+      emitTo(`request:${request.id}`, 'request:updated', { request });
+      emitTo(`user:${request.requesterId}`, 'request:updated', { request });
+    } catch (_) {}
   }
 
   /**
@@ -61,18 +82,16 @@ class RadiusEngine {
     try {
       const now = Date.now();
       for (const [requestId, request] of db.requests.entries()) {
-        // Only process searching requests
         if (request.status !== 'searching') continue;
 
         if (request.nextCheckAt && now >= request.nextCheckAt) {
-          const categoryConfig = config.radiusConfig[request.type] || config.radiusConfig.general;
-          const currentStep = request.radius.stepIndex;
+          const categoryConfig = this.getRadiusConfig(request.type);
+          const currentStep = request.radius?.stepIndex || 0;
 
           if (currentStep + 1 < categoryConfig.stepsKm.length) {
-            // Advance to next step
             request.radius.stepIndex = currentStep + 1;
             request.radius.currentKm = categoryConfig.stepsKm[request.radius.stepIndex];
-            const waitSec = categoryConfig.waitSec[request.radius.stepIndex] || 60;
+            const waitSec = categoryConfig.waitSec[request.radius.stepIndex] || 45;
             request.nextCheckAt = now + waitSec * 1000;
 
             request.radius.history.push({
@@ -84,13 +103,23 @@ class RadiusEngine {
 
             console.log(`[RADIUS ENGINE] Request ${requestId} expanded to ${request.radius.currentKm} km (Step ${request.radius.stepIndex + 1}/${categoryConfig.stepsKm.length})`);
             await this.expandAndNotify(request);
+
+            // Broadcast expansion update via socket
+            try {
+              emitTo(`request:${requestId}`, 'request:updated', { request });
+              emitTo(`user:${request.requesterId}`, 'request:updated', { request });
+            } catch (_) {}
           } else {
             // Reached max radius and timed out
             request.status = 'expired';
             request.expiredAt = new Date().toISOString();
             console.log(`[RADIUS ENGINE] Request ${requestId} expired without helper acceptance.`);
 
-            // Notify requester
+            try {
+              emitTo(`request:${requestId}`, 'request:updated', { request });
+              emitTo(`user:${request.requesterId}`, 'request:updated', { request });
+            } catch (_) {}
+
             await notificationService.sendToUser(request.requesterId, {
               title: 'Search Radius Expired',
               body: 'No nearby helpers accepted your request yet. You may retry or contact emergency services directly.',
@@ -98,6 +127,9 @@ class RadiusEngine {
               type: 'expired',
               priority: 'high'
             });
+
+            db.requests.set(requestId, request);
+            db.saveRequests();
           }
         }
       }
@@ -114,19 +146,16 @@ class RadiusEngine {
   async expandAndNotify(request) {
     const candidates = matchingService.findNearbyEligibleHelpers(request, request.radius.currentKm);
     
-    // Track notified set
     if (!db.notifiedHelperIndex.has(request.id)) {
       db.notifiedHelperIndex.set(request.id, new Set());
     }
     const notifiedSet = db.notifiedHelperIndex.get(request.id);
 
-    // Update history entry helper count
     const currentHistory = request.radius.history[request.radius.history.length - 1];
     if (currentHistory) {
       currentHistory.helpersFound += candidates.length;
     }
 
-    // Send notifications to each candidate (no duplicates)
     for (const helper of candidates) {
       notifiedSet.add(helper.helperId);
 

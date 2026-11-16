@@ -5,6 +5,7 @@ const smsService = require('../services/smsService');
 const notificationService = require('../services/notificationService');
 const pricingService = require('../services/pricingService');
 const { calculateHaversineDistance, estimateETA } = require('../utils/distance');
+const { emitTo } = require('../realtime/io');
 
 class RequestController {
   // Create Request (Emergency SOS, General, Scheduled)
@@ -109,6 +110,12 @@ class RequestController {
 
     // 2. Start radius search & notification engine
     await radiusEngine.initializeRequestExpansion(newRequest);
+
+    // Live Socket dispatch
+    try {
+      emitTo('helpers:available', 'request:new', { request: newRequest });
+      emitTo(`request:${newRequest.id}`, 'request:updated', { request: newRequest });
+    } catch (_) {}
 
     db.logAudit('REQUEST_CREATED', requesterId, {
       requestId,
@@ -318,6 +325,13 @@ class RequestController {
       priority: 'high'
     });
 
+    // Real-time Socket broadcasts
+    try {
+      emitTo(`request:${id}`, 'request:updated', { request, helper, trackingSession });
+      emitTo(`user:${request.requesterId}`, 'request:updated', { request, helper, trackingSession });
+      emitTo('helpers:available', 'request:taken', { requestId: id, helperId });
+    } catch (_) {}
+
     db.logAudit('REQUEST_ACCEPTED', helperId, { requestId: id, helperId });
 
     return res.json({
@@ -391,6 +405,14 @@ class RequestController {
 
     db.logAudit('REQUEST_COMPLETED', req.user.id, { requestId: id, pricing });
 
+    try {
+      emitTo(`request:${id}`, 'request:updated', { request, status: 'completed' });
+      emitTo(`user:${request.requesterId}`, 'request:updated', { request, status: 'completed' });
+      if (request.acceptedHelperId) {
+        emitTo(`user:${request.acceptedHelperId}`, 'request:updated', { request, status: 'completed' });
+      }
+    } catch (_) {}
+
     return res.json({
       message: 'Request marked as completed. Thank you for making the community safer!',
       request,
@@ -440,6 +462,12 @@ class RequestController {
         priority: 'high'
       });
     }
+
+    try {
+      emitTo(`request:${id}`, 'request:updated', { request, status: 'cancelled' });
+      emitTo(`user:${request.requesterId}`, 'request:updated', { request, status: 'cancelled' });
+      emitTo('helpers:available', 'request:taken', { requestId: id, cancelled: true });
+    } catch (_) {}
 
     return res.json({ message: 'Request cancelled successfully', request });
   }

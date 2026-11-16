@@ -2,8 +2,12 @@ const http = require('http');
 const app = require('./app');
 const config = require('./config');
 const radiusEngine = require('./services/radiusEngine');
+const { initIO } = require('./realtime/io');
 
 const server = http.createServer(app);
+
+// Initialize Socket.io Realtime Engine
+initIO(server);
 
 // Start the Automatic Radius Expansion Engine Background Worker
 radiusEngine.start();

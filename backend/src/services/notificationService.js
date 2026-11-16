@@ -1,9 +1,10 @@
 const db = require('../models/dataStore');
+const { emitTo } = require('../realtime/io');
 
 class NotificationService {
   constructor() {
     this.notifications = []; // in-memory notification queue for instant delivery
-    this.subscribers = new Map(); // userId -> response handlers (SSE/Polling)
+    this.subscribers = new Map(); // userId -> response handlers
   }
 
   /**
@@ -27,7 +28,17 @@ class NotificationService {
 
     this.notifications.push(notification);
 
-    // Notify active WebSocket/SSE subscribers if present
+    // Keep notifications bounded to last 200 items in memory
+    if (this.notifications.length > 200) {
+      this.notifications.shift();
+    }
+
+    // Emit live via Socket.io to user's private room
+    try {
+      emitTo(`user:${userId}`, 'notification:new', { notification });
+    } catch (_) {}
+
+    // Notify active subscribers if present
     const subscriber = this.subscribers.get(userId);
     if (subscriber && typeof subscriber === 'function') {
       subscriber(notification);

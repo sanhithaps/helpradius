@@ -1,6 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 const db = require('../models/dataStore');
 const notificationService = require('../services/notificationService');
+const { emitTo } = require('../realtime/io');
 
 class ChatController {
   // Get chat messages
@@ -96,6 +97,11 @@ class ChatController {
         priority: 'normal'
       });
     }
+
+    // Broadcast live via Socket.io
+    try {
+      emitTo(`request:${id}`, 'chat:message', { requestId: id, message: newMessage });
+    } catch (_) {}
 
     return res.status(201).json({ message: 'Message sent', data: newMessage });
   }

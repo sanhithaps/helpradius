@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useSocket } from '../context/SocketContext';
 import { useNotifications } from '../context/NotificationContext';
 import api from '../services/api';
 import {
@@ -25,6 +26,7 @@ import {
 export default function Navbar({ onOpenSOS }) {
   const { user, helperProfile, logout, toggleAvailability } = useAuth();
   const { notifications } = useNotifications();
+  const { isConnected: isSocketConnected } = useSocket();
   const [backendStatus, setBackendStatus] = useState('checking');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
@@ -69,11 +71,11 @@ export default function Navbar({ onOpenSOS }) {
               </div>
             </Link>
 
-            {/* Backend status badge */}
-            <div className="hidden md:flex items-center gap-1.5 ml-4 px-2.5 py-1 rounded-full text-xs font-medium border bg-slate-50 border-slate-200">
-              <span className={`w-2 h-2 rounded-full ${backendStatus === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+            {/* Backend & Real-time Socket status badge */}
+            <div className="hidden md:flex items-center gap-2 ml-4 px-2.5 py-1 rounded-full text-xs font-medium border bg-slate-50 border-slate-200">
+              <span className={`w-2 h-2 rounded-full ${isSocketConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
               <span className="text-slate-600">
-                Backend: <strong className={backendStatus === 'online' ? 'text-emerald-700' : 'text-rose-700'}>{backendStatus}</strong>
+                Socket: <strong className={isSocketConnected ? 'text-emerald-700 font-bold' : 'text-amber-700 font-bold'}>{isSocketConnected ? 'Live' : 'Reconnecting'}</strong>
               </span>
             </div>
           </div>

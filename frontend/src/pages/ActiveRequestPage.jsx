@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useSocket, useSocketEvent } from '../context/SocketContext';
 import TrackingMap from '../components/TrackingMap';
 import LocationPickerMap from '../components/LocationPickerMap';
 import VoiceCallModal from '../components/VoiceCallModal';
@@ -57,11 +58,33 @@ export default function ActiveRequestPage() {
     }
   };
 
+  const { socket } = useSocket();
+
   useEffect(() => {
     fetchDetails();
-    const interval = setInterval(fetchDetails, 3000);
-    return () => clearInterval(interval);
   }, [id]);
+
+  useEffect(() => {
+    if (!socket || !id) return;
+    socket.emit('request:join', { requestId: id });
+    return () => {
+      socket.emit('request:leave', { requestId: id });
+    };
+  }, [socket, id]);
+
+  useSocketEvent('request:updated', (data) => {
+    if (data.request?.id === id) {
+      setRequest(data.request);
+      if (data.helper) setHelper(data.helper);
+      if (data.trackingSession) setTrackingSession(data.trackingSession);
+    }
+  });
+
+  useSocketEvent('contact-alert:updated', (data) => {
+    if (data.requestId === id && data.contactAlerts) {
+      setContactAlerts(data.contactAlerts);
+    }
+  });
 
   const handleMarkCompleted = async () => {
     try {

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { SocketProvider } from './context/SocketContext';
 import { NotificationProvider } from './context/NotificationContext';
 
 import Navbar from './components/Navbar';
@@ -22,8 +23,9 @@ export default function App() {
 
   return (
     <AuthProvider>
-      <NotificationProvider>
-        <Router>
+      <SocketProvider>
+        <NotificationProvider>
+          <Router>
           <div className="min-h-screen bg-slate-50 flex flex-col font-['Plus_Jakarta_Sans',sans-serif] selection:bg-rose-500 selection:text-white">
             {/* Top Navigation */}
             <Navbar onOpenSOS={() => setSosModalOpen(true)} />
@@ -66,6 +68,7 @@ export default function App() {
           </div>
         </Router>
       </NotificationProvider>
-    </AuthProvider>
+    </SocketProvider>
+  </AuthProvider>
   );
 }

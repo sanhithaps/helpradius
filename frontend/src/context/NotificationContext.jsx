@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import api from '../services/api';
 import { useAuth } from './AuthContext';
+import { useSocketEvent } from './SocketContext';
 
 const NotificationContext = createContext(null);
 
@@ -15,16 +16,25 @@ export const NotificationProvider = ({ children }) => {
       const res = await api.get('/notifications');
       setNotifications(res.data.notifications || []);
     } catch (e) {
-      // Ignore polling errors
+      // Ignore network errors on initial load
     }
   };
 
   useEffect(() => {
     if (!user) return;
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 4000);
-    return () => clearInterval(interval);
-  }, [user]);
+  }, [user?.id]);
+
+  // Real-time Event: Incoming push notification via Socket.io
+  useSocketEvent('notification:new', (data) => {
+    if (data?.notification) {
+      setNotifications((prev) => [data.notification, ...prev]);
+      showToast({
+        title: data.notification.title,
+        body: data.notification.body
+      });
+    }
+  });
 
   const showToast = (toast) => {
     setActiveToast(toast);
@@ -56,4 +66,8 @@ export const NotificationProvider = ({ children }) => {
   );
 };
 
-export const useNotifications = () => useContext(NotificationContext);
+export const useNotifications = () => {
+  const context = useContext(NotificationContext);
+  if (!context) throw new Error('useNotifications must be used within a NotificationProvider');
+  return context;
+};
