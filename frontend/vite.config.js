@@ -25,5 +25,16 @@ export default defineConfig({
         changeOrigin: true
       }
     }
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'leaflet-vendor': ['leaflet'],
+          'socket-vendor': ['socket.io-client'],
+          'lucide-vendor': ['lucide-react']
+        }
+      }
+    }
   }
 });

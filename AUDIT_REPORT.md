@@ -109,7 +109,7 @@ This audit report provides an objective evaluation of every subsystem, detailing
 
 ### 3.7. Admin Panel (`/admin`)
 - **Current State:** Fully functional.
-  - Default Admin credentials: `admin@helpradius.org` / `password123`.
+  - Admin credentials: Configured via `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `backend/.env` (hashed with bcrypt).
   - Capabilities:
     - View all registered helpers and their submitted ID numbers.
     - Approve or reject pending helper applications.

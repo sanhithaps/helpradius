@@ -6,111 +6,172 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker Ready](https://img.shields.io/badge/docker-ready-blue.svg)](https://www.docker.com/)
 
-**Help Radius** connects individuals in immediate distress or everyday need with nearby verified volunteers and emergency first-responders using GPS geofencing, automatic radius expansion, and privacy-preserving communication.
+**Help Radius** connects individuals in immediate distress or everyday need with nearby verified volunteers and emergency first-responders using GPS geofencing, real-time Socket.io streaming, OSRM road routing, WebRTC voice calling, and privacy-preserving communication.
 
 ---
 
-## 🌟 Key Features & Implementation Split
+## 🌟 Feature Status & Architecture
 
-| Feature | Status | Description |
+| Feature | Status | Details & Implementation |
 | :--- | :---: | :--- |
-| **Emergency SOS (Press & Hold)** | ✅ **Working** | Big Red SOS button with 2s hold protection, 5s cancel countdown, and 112 hotline shortcut. |
-| **General Immediate Help** | ✅ **Working** | Tyre punctures, breakdowns, heavy objects with map pin-drop & transparent travel compensation. |
-| **Scheduled Help** | ✅ **Working** | Hospital companions, elderly assistance with future date selection, lead times & rescheduling. |
-| **Dynamic Radius Expansion** | ✅ **Working** | Background worker expands search (2km → 5km → 10km → 20km) with duplicate notification suppression. |
-| **Emergency Contact Alerts** | ✅ **Working** | Dispatches simultaneous alerts to saved contacts (up to 6) independent of distance with delivery badges. |
-| **Atomic Helper Acceptance** | ✅ **Working** | Server concurrency lock ensuring only one helper can accept a request. |
-| **Real-Time Live Tracking** | ✅ **Working** | Live map with requester & helper markers, connecting route polyline, distance & ETA countdown. |
-| **In-App Private Chat** | ✅ **Working** | Text, photo sharing, and **browser MediaRecorder voice notes** with read receipts. Locks upon completion. |
-| **In-App Voice Calling** | 🟡 **Prototype** | WebRTC in-app audio call simulation with synthesized ringtone. **Zero phone numbers exposed.** |
-| **Helper ID Verification** | 🟡 **Prototype** | Volunteer document verification workflow with Admin approval and Personal Safety certification. |
+| **Password Hashing & Security** | ✅ **Working** | `bcryptjs` with 10 salt rounds, cryptographic JWT secret in `.env`, masked verification IDs (`XXXX-XXXX-last4`), and atomic data store writes. |
+| **Real-Time Bidirectional Sync** | ✅ **Working** | **Socket.io** event streaming (`chat:send`, `chat:typing`, `chat:read`, `request:new`, `request:taken`, `request:updated`, `notification:new`). HTTP polling completely removed. |
+| **Live GPS Streaming** | ✅ **Working** | Helper `watchPosition` streaming throttled to 3s / 10m intervals, broadcast to private request room. |
+| **Turn-by-Turn Road Routing** | ✅ **Working** | OSRM road-snapped GeoJSON polylines with 5s timeout and Haversine straight-line fallback. |
+| **WebRTC Audio Calling** | ✅ **Working** | Real WebRTC audio call stream with Google STUN (`stun:stun.l.google.com:19302`) and Socket.io signaling. Simulated beep removed. |
+| **Emergency SOS (Press & Hold)** | ✅ **Working** | 2-second hold protection, 5-second countdown with cancel option, and 112 hotline shortcut. |
+| **Cellular SMS Dispatch** | 🟡 **Honest Status** | **Simulated unless Twilio credentials are set** in `.env` (never labelled "delivered" without real telecom dispatch). Supports retry endpoint. |
+| **Browser System Notifications** | ✅ **Working** | In-app toasts + HTML5 `Notification` when tab is backgrounded with audio siren/chime. (*Closed-tab FCM push = future work*). |
+| **Helper ID Verification** | 🟡 **Admin Review** | Mandatory verification ID on registration; reviewed manually via Admin Panel. ID masked for privacy. |
 | **Transparent Pricing** | ✅ **Working** | 3-tier itemized breakdown (Expansion Fee, Travel Comp, Reward). SOS is 100% free & unconditional. |
 | **Admin Moderation Panel** | ✅ **Working** | Live metrics, helper approvals, safety certifications, user suspension, and audit trails. |
-| **Full Containerization** | ✅ **Working** | Multi-stage production Nginx frontend, Alpine backend, and single-command Docker Compose setup. |
+| **Database Persistence** | 🟡 **Atomic JSON** | Safe atomic file writes (`.tmp` + rename) with sequential write queue. (*MongoDB/PostgreSQL = future work*). |
+| **TURN Relaying** | 🟡 **STUN Only** | Direct peer-to-peer WebRTC via public STUN server. (*Symmetric NAT / corporate firewall TURN = future work*). |
 
 ---
 
-## 🏗️ System Architecture
+## 🚀 Getting Started
 
-```
-Help-Radius/
-├── frontend/               # React 18 + Vite + Tailwind CSS + Leaflet Maps
-│   ├── src/components/     # SOS Modal, Tracking Map, Voice Recorder, Voice Call Modal
-│   ├── src/context/        # AuthContext (Role Switcher), NotificationContext
-│   ├── src/pages/          # Dashboard, General, Scheduled, Active Emergency, Inbox, Chat, Admin
-│   ├── Dockerfile          # Multi-stage production build with Nginx SPA routing
-│   └── nginx.conf          # Gzip compression, API proxy, and security headers
-├── backend/                # Node.js + Express REST API
-│   ├── src/controllers/    # Auth, Helpers, Requests, Chat, Calls, Admin
-│   ├── src/services/       # RadiusEngine, MatchingService, PricingService, SmsService
-│   ├── src/models/         # In-Memory & File-Persisted Realtime DataStore
-│   ├── test/               # Node Test Runner Unit Tests
-│   └── Dockerfile          # Lightweight Alpine Node image with non-root security
-├── docs/                   # ARCHITECTURE.md, API.md, SECURITY_PRIVACY.md, TEST_PLAN.md
-├── docker-compose.yml      # Production Orchestration
-├── docker-compose.dev.yml  # Development Hot-Reload Setup
-└── .github/workflows/      # GitHub Actions Automated CI/CD
-```
+### 1. Environment Configuration
 
----
-
-## 🚀 Quick Start (Running Locally)
-
-### Option A: Using Docker Compose (Single Command)
+Copy the example environment file and configure your credentials:
 
 ```bash
-# Start both Frontend and Backend containers with healthchecks:
-docker compose up --build
+cd backend
+cp .env.example .env
 ```
-- Frontend UI: `http://localhost:8080` (or `http://localhost:5173`)
-- Backend API: `http://localhost:5000`
-- API Health Check: `http://localhost:5000/api/health`
 
----
+Your `.env` contains:
+```env
+PORT=5000
+NODE_ENV=development
+JWT_SECRET=<generated-48-byte-hex-secret>
+CORS_ORIGIN=*
+SMS_PROVIDER=simulated
+ADMIN_EMAIL=admin@helpradius.org
+ADMIN_PASSWORD=<your-secure-admin-password>
+```
 
-### Option B: Running Without Docker
+### 2. Password Migration (If upgrading existing database)
 
-#### 1. Backend Setup
+If you have existing plaintext records in `backend/data/users.json`, run the one-time migration script:
+```bash
+cd backend
+node scripts/migratePasswords.js
+```
+
+### 3. Run Backend (Port 5000)
+
 ```bash
 cd backend
 npm install
 npm start
-# Server starts on port 5000 with background radius expansion engine active
+# Server starts on http://localhost:5000 with Socket.io real-time engine
 ```
 
-#### 2. Frontend Setup
+### 4. Run Frontend (Port 5173)
+
 ```bash
 cd frontend
 npm install
 npm run dev
-# Vite dev server starts on http://localhost:5173
+# Vite server starts on http://localhost:5173
 ```
 
----
+### 5. Mobile & Friend-to-Friend Testing (HTTPS over LAN)
 
-## 👥 Authentication & Roles (Registration & Persistent Login)
+Modern mobile browsers (Chrome on Android, Safari on iOS) **require HTTPS** to allow `navigator.geolocation.watchPosition` and microphone access on local network IPs (e.g., `192.168.x.x`).
 
-Help Radius features a secure, database-persisted authentication system:
+Help Radius includes built-in LAN SSL support via `@vitejs/plugin-basic-ssl`:
 
-1. **User Registration**: First-time visitors register with Full Name, Email, Mobile Number, Password, and a mandatory **Verification ID Number** (Aadhaar, Voter ID, Driving License, Student ID, or Passport). Users can register as a **Requester** or a **Community Helper / Volunteer** and add custom emergency contacts.
-2. **Persistent Login**: Registered users log in with their Email or Mobile and Password. Account data, emergency contacts, and personal request history are verified and loaded from the persistent database.
-3. **Helper / Acceptor Role**: Users who register as a helper receive nearby requests in their **Helper Inbox**, accept requests with an atomic lock, and assist requesters via live tracking and private chat.
-4. **Administrator**: Accesses `/admin` using credentials configured via `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `.env` to review volunteer verification credentials, certify helpers for personal safety, manage users, and view system audit logs.
+```bash
+cd frontend
+# Set VITE_HTTPS=true to run with a trusted local SSL certificate
+$env:VITE_HTTPS="true"; npm run dev -- --host
+```
+Open `https://<YOUR_LAPTOP_LAN_IP>:5173` on your friend's phone or laptop, accept the local self-signed certificate, and live GPS + microphone permissions will work natively!
 
 ---
 
 ## 🧪 Running Unit Tests
 
+Run the backend automated test runner:
+
 ```bash
 cd backend
 npm test
 ```
-Executes all 5 core test suites verifying Haversine calculations, ETA algorithms, Emergency SOS fee exemptions, travel compensation rates, and emergency contact limits.
+
+All 16 test suites pass cleanly:
+- Haversine Distance spherical trigonometry
+- Urban transit speed ETA estimation
+- Emergency SOS 100% free pricing rule
+- General Help 3-tier pricing & travel compensation
+- Emergency contacts 6-contact maximum limit
+- Socket.io authentication rejection without token
+- Socket.io authentication acceptance with token
+- Socket room access control (non-participant rejection)
+- Password hashing with bcryptjs on user registration
+- `toPublicUser` sanitization (never exposes passwordHash or raw ID numbers)
+- Non-admin user 403 Forbidden role guard
+- Admin user role access
+- Private request access control (403 for non-participants)
+- Phone number normalization to E.164 (`+91...`)
+- Simulated SMS provider returns status "simulated" (never "delivered")
+- Twilio fallback to simulated provider when credentials are missing
 
 ---
 
-## 🛡️ Privacy & Prototype Notice
+## 📦 Production Build & Code Splitting
 
-- **No Aadhaar Numbers Stored:** As required by data minimization standards, Help Radius does not collect or store raw Aadhaar numbers or scans. Identity verification is simulated for demonstration purposes.
-- **Strict Identity Protection:** Neither the requester nor the helper can view each other's phone numbers; all voice calls and messaging are mediated internally.
-- **Temporary Location Tracking:** Location coordinates are shared only during an active request and cease immediately upon request completion.
+Run the frontend production build:
+
+```bash
+cd frontend
+npm run build
+```
+
+Bundle output is split with `React.lazy` and manual Rollup chunks so **no chunk exceeds 500 kB**:
+- `index.js`: ~249 kB
+- `leaflet-vendor.js`: ~149 kB
+- `socket-vendor.js`: ~41 kB
+- `lucide-vendor.js`: ~32 kB
+- All route components lazy-loaded on demand.
+
+---
+
+## 🐳 Docker Deployment
+
+Run both backend and frontend via Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+- Frontend: `http://localhost:8080` (or `http://localhost:5173`)
+- Backend: `http://localhost:5000`
+- Nginx reverse proxies both `/api/` and `/socket.io/` WebSocket connections.
+
+---
+
+## 📋 Smoke Test Checklist
+
+- [x] **Registration:** New user signs up with Verification ID, email, password, and custom emergency contacts.
+- [x] **Login:** Authenticates with bcrypt hash verification; receives JWT.
+- [x] **Emergency SOS:** Triggered via 2s press-and-hold; dispatches honest SMS alert (`simulated` badge).
+- [x] **Helper Dispatch:** Available helpers receive instant `request:new` notification via Socket.io.
+- [x] **Atomic Lock:** First helper accepts; request transitions to `accepted`.
+- [x] **Live GPS & Routing:** Helper location streams over `helper:location`; OSRM snaps route to roads.
+- [x] **Private In-App Chat:** Real-time messages, typing indicators, and voice notes.
+- [x] **WebRTC Calling:** Microphone-to-microphone voice calling with Google STUN signaling.
+- [x] **Completion & Safety Confirmation:** Requester marks completed, leaves rating, and confirms "I am Safe".
+- [x] **Admin Panel:** Moderates helpers, views audit trail, and verifies masked identity documents.
+
+---
+
+## 🛡️ Security & Privacy Notice
+
+- **Password Security:** All passwords are salt-hashed using `bcryptjs` with 10 rounds. Plaintext passwords are never stored.
+- **Identity Protection:** Neither the requester nor the helper can view each other's cellular telephone numbers; all messaging and calls are mediated through in-app WebRTC and Socket.io.
+- **Verification ID Masking:** Raw IDs are masked as `XXXX-XXXX-last4` on all public APIs.
+- **Zero Third-Party Leaks:** Audio voice notes and coordinates are stored strictly within the private session and access-controlled by JWT authorization.
