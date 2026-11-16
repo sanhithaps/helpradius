@@ -180,6 +180,44 @@ function initIO(httpServer) {
       }
     });
 
+    // Live GPS Location Streaming from Accepted Helper (Phase 3)
+    socket.on('helper:location', ({ requestId, lat, lng, accuracy, heading, speed }) => {
+      if (typeof lat !== 'number' || typeof lng !== 'number' || !requestId) return;
+
+      const request = db.requests.get(requestId);
+      if (!request) return;
+
+      // Must be the accepted helper of an active request
+      if (request.acceptedHelperId !== userId) return;
+      if (request.status !== 'accepted' && request.status !== 'in_progress') return;
+
+      const locationUpdate = {
+        lat,
+        lng,
+        accuracy: accuracy || 15,
+        heading: heading || null,
+        speed: speed || null,
+        updatedAt: new Date().toISOString()
+      };
+
+      request.lastHelperLocation = locationUpdate;
+      db.requests.set(requestId, request);
+
+      // Update helper's location in dataStore
+      const helper = db.helpers.get(userId);
+      if (helper) {
+        helper.location = locationUpdate;
+        db.helpers.set(userId, helper);
+      }
+
+      // Broadcast live position to the request room
+      io.to(`request:${requestId}`).emit('helper:location', {
+        requestId,
+        helperId: userId,
+        location: locationUpdate
+      });
+    });
+
     // Helper toggle availability
     socket.on('helpers:toggle-available', ({ isAvailable }) => {
       if (isAvailable) {

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSocket, useSocketEvent } from '../context/SocketContext';
+import { useLiveLocation } from '../hooks/useLiveLocation';
 import TrackingMap from '../components/TrackingMap';
 import LocationPickerMap from '../components/LocationPickerMap';
 import VoiceCallModal from '../components/VoiceCallModal';
@@ -77,6 +78,20 @@ export default function ActiveRequestPage() {
       setRequest(data.request);
       if (data.helper) setHelper(data.helper);
       if (data.trackingSession) setTrackingSession(data.trackingSession);
+    }
+  });
+
+  const isHelper = user?.id === request?.acceptedHelperId;
+  const { isSharing, error: locationError, stopSharing, startSharing } = useLiveLocation(
+    id,
+    request?.status,
+    isHelper
+  );
+
+  useSocketEvent('helper:location', (data) => {
+    if (data.requestId === id && data.location) {
+      setHelper((prev) => (prev ? { ...prev, location: data.location } : prev));
+      setTrackingSession((prev) => (prev ? { ...prev, helperLocation: data.location } : prev));
     }
   });
 
@@ -292,6 +307,29 @@ export default function ActiveRequestPage() {
       {/* LIVE TRACKING & HELPER CARD (When accepted or in progress) */}
       {isAcceptedOrActive && (
         <div className="space-y-6">
+          {/* Helper Live GPS Location Banner */}
+          {isHelper && (
+            <div className={`p-4 rounded-2xl border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm ${
+              isSharing ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-slate-100 border-slate-200 text-slate-700'
+            }`}>
+              <div className="flex items-center gap-2.5">
+                <span className={`w-2.5 h-2.5 rounded-full ${isSharing ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+                <span className="font-semibold">
+                  {isSharing
+                    ? 'Sharing your live GPS location with the requester until this session ends.'
+                    : 'Live GPS location sharing is paused.'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={isSharing ? stopSharing : startSharing}
+                className="px-3.5 py-1.5 rounded-xl bg-white border font-bold text-xs shadow-sm hover:bg-slate-50 transition-all self-start sm:self-auto"
+              >
+                {isSharing ? 'Pause Sharing' : 'Resume Sharing'}
+              </button>
+            </div>
+          )}
+
           {/* Tracking Map with Helper Moving Towards Requester */}
           <TrackingMap
             requesterLocation={request.location}
