@@ -320,7 +320,11 @@ class AuthController {
   async getEmergencyContacts(req, res) {
     const user = db.users.get(req.user.id);
     if (!user) return res.status(404).json({ error: 'NotFound' });
-    return res.json({ emergencyContacts: user.emergencyContacts || [] });
+    const contacts = user.emergencyContacts || [];
+    return res.json({
+      contacts,
+      emergencyContacts: contacts
+    });
   }
 
   async addEmergencyContact(req, res) {
@@ -355,6 +359,7 @@ class AuthController {
     return res.status(201).json({
       message: 'Emergency contact added',
       contact: newContact,
+      contacts: user.emergencyContacts,
       emergencyContacts: user.emergencyContacts
     });
   }
@@ -370,6 +375,7 @@ class AuthController {
 
     return res.json({
       message: 'Emergency contact removed',
+      contacts: user.emergencyContacts,
       emergencyContacts: user.emergencyContacts
     });
   }

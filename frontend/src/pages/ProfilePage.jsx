@@ -21,10 +21,12 @@ import {
 export default function ProfilePage() {
   const { user, helperProfile, refreshUser } = useAuth();
 
-  const [contacts, setContacts] = useState([]);
+  const [contacts, setContacts] = useState(user?.emergencyContacts || []);
   const [newContactName, setNewContactName] = useState('');
   const [newContactPhone, setNewContactPhone] = useState('');
-  const [newContactRelation, setNewContactRelation] = useState('Family');
+  const [newContactRelation, setNewContactRelation] = useState('Parent');
+  const [savingContact, setSavingContact] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
 
   const [helperCategories, setHelperCategories] = useState(['accident', 'puncture', 'stranded']);
   const [wantsSafety, setWantsSafety] = useState(true);
@@ -33,41 +35,62 @@ export default function ProfilePage() {
   const fetchContacts = async () => {
     try {
       const res = await api.get('/users/me/emergency-contacts');
-      setContacts(res.data.contacts || []);
-    } catch (e) {}
+      const list = res.data.contacts || res.data.emergencyContacts || [];
+      setContacts(list);
+    } catch (e) {
+      console.warn('Could not fetch emergency contacts', e);
+    }
   };
 
   useEffect(() => {
+    if (user?.emergencyContacts) {
+      setContacts(user.emergencyContacts);
+    }
     fetchContacts();
-  }, []);
+  }, [user?.id]);
 
   const handleAddContact = async (e) => {
     e.preventDefault();
-    if (!newContactName || !newContactPhone) {
+    const cleanName = newContactName.trim();
+    let cleanPhone = newContactPhone.trim();
+
+    if (!cleanName || !cleanPhone) {
       alert('Name and mobile number are required.');
       return;
     }
 
+    setSavingContact(true);
+    setSuccessMsg('');
     try {
-      await api.post('/users/me/emergency-contacts', {
-        name: newContactName,
-        phone: newContactPhone,
+      const res = await api.post('/users/me/emergency-contacts', {
+        name: cleanName,
+        phone: cleanPhone,
         relationship: newContactRelation
       });
+      const updatedList = res.data.contacts || res.data.emergencyContacts || [];
+      setContacts(updatedList);
       setNewContactName('');
       setNewContactPhone('');
-      fetchContacts();
-      refreshUser();
+      setSuccessMsg('Emergency contact saved successfully!');
+      setTimeout(() => setSuccessMsg(''), 4000);
+      if (refreshUser) {
+        await refreshUser();
+      }
     } catch (err) {
       alert(err.response?.data?.message || 'Could not add contact.');
+    } finally {
+      setSavingContact(false);
     }
   };
 
   const handleDeleteContact = async (contactId) => {
     try {
-      await api.delete(`/users/me/emergency-contacts/${contactId}`);
-      fetchContacts();
-      refreshUser();
+      const res = await api.delete(`/users/me/emergency-contacts/${contactId}`);
+      const updatedList = res.data.contacts || res.data.emergencyContacts || [];
+      setContacts(updatedList);
+      if (refreshUser) {
+        await refreshUser();
+      }
     } catch (e) {
       alert('Could not remove contact.');
     }
@@ -155,24 +178,43 @@ export default function ProfilePage() {
           </span>
         </div>
 
+        {/* Success Alert Banner */}
+        {successMsg && (
+          <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs font-bold text-emerald-800 flex items-center gap-2 animate-fade-in">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+            <span>{successMsg}</span>
+          </div>
+        )}
+
         {/* Existing Contacts List */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {contacts.map(c => (
-            <div key={c.id} className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-              <div>
-                <span className="font-bold text-xs text-slate-900 block">{c.name}</span>
-                <span className="text-[11px] text-slate-500 font-mono">{c.phone} • {c.relationship}</span>
+        {contacts.length === 0 ? (
+          <div className="py-8 px-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center space-y-1.5">
+            <Users className="w-8 h-8 text-slate-300 mx-auto" />
+            <p className="text-xs font-bold text-slate-700">No emergency contacts saved yet</p>
+            <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
+              Add trusted family members or friends below. When you trigger an Emergency SOS, they will be notified simultaneously.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {contacts.map(c => (
+              <div key={c.id} className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between shadow-sm">
+                <div>
+                  <span className="font-bold text-xs text-slate-900 block">{c.name}</span>
+                  <span className="text-[11px] text-slate-500 font-mono">{c.phone} • {c.relationship}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteContact(c.id)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                  title="Remove contact"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
-              <button
-                onClick={() => handleDeleteContact(c.id)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                title="Remove contact"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
         {/* Add Contact Form (enforces max 6) */}
         {contacts.length < 6 ? (
@@ -184,21 +226,24 @@ export default function ProfilePage() {
                 placeholder="Full Name (e.g. Papa)"
                 value={newContactName}
                 onChange={(e) => setNewContactName(e.target.value)}
-                className="p-2.5 rounded-xl border border-slate-200 text-xs outline-none focus:border-rose-500"
+                disabled={savingContact}
+                className="p-2.5 rounded-xl border border-slate-200 text-xs outline-none focus:border-rose-500 bg-white"
                 required
               />
               <input
                 type="tel"
-                placeholder="+91 Mobile Number"
+                placeholder="Mobile Number (e.g. 9876543210)"
                 value={newContactPhone}
                 onChange={(e) => setNewContactPhone(e.target.value)}
-                className="p-2.5 rounded-xl border border-slate-200 text-xs outline-none focus:border-rose-500 font-mono"
+                disabled={savingContact}
+                className="p-2.5 rounded-xl border border-slate-200 text-xs outline-none focus:border-rose-500 font-mono bg-white"
                 required
               />
               <select
                 value={newContactRelation}
                 onChange={(e) => setNewContactRelation(e.target.value)}
-                className="p-2.5 rounded-xl border border-slate-200 text-xs outline-none focus:border-rose-500"
+                disabled={savingContact}
+                className="p-2.5 rounded-xl border border-slate-200 text-xs outline-none focus:border-rose-500 bg-white"
               >
                 <option value="Parent">Parent</option>
                 <option value="Sibling">Sibling</option>
@@ -210,10 +255,11 @@ export default function ProfilePage() {
             </div>
             <button
               type="submit"
-              className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow flex items-center gap-1.5"
+              disabled={savingContact}
+              className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow flex items-center gap-1.5 transition-all"
             >
               <Plus className="w-4 h-4" />
-              <span>Save Contact</span>
+              <span>{savingContact ? 'Saving Contact...' : 'Save Contact'}</span>
             </button>
           </form>
         ) : (
