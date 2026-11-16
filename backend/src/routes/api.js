@@ -56,6 +56,7 @@ router.patch('/requests/:id/cancel', requireAuth, (req, res) => requestControlle
 router.patch('/requests/:id/reschedule', requireAuth, (req, res) => requestController.rescheduleRequest(req, res));
 router.post('/requests/:id/media', requireAuth, (req, res) => requestController.addMedia(req, res));
 router.post('/requests/:id/rate', requireAuth, (req, res) => requestController.submitRating(req, res));
+router.post('/requests/:id/contact-alerts/:alertIndex/retry', requireAuth, (req, res) => requestController.retryContactAlert(req, res));
 
 // 5. Live Tracking Session Stream
 router.get('/tracking/:id', requireAuth, (req, res) => {

@@ -25,10 +25,11 @@ import {
 
 export default function Navbar({ onOpenSOS }) {
   const { user, helperProfile, logout, toggleAvailability } = useAuth();
-  const { notifications } = useNotifications();
+  const { notifications, markAllAsRead } = useNotifications();
   const { isConnected: isSocketConnected } = useSocket();
   const [backendStatus, setBackendStatus] = useState('checking');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
   const location = useLocation();
 
   useEffect(() => {
@@ -125,6 +126,81 @@ export default function Navbar({ onOpenSOS }) {
 
           {/* Right Action buttons */}
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* Notification Bell Dropdown */}
+            {user && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setNotifDropdownOpen(!notifDropdownOpen)}
+                  className="p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors relative"
+                  title="Notifications"
+                >
+                  <Bell className="w-5 h-5" />
+                  {unreadCount > 0 && (
+                    <span className="absolute top-1 right-1 w-4 h-4 bg-rose-600 text-white rounded-full text-[9px] font-black flex items-center justify-center animate-pulse">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </button>
+
+                {notifDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 z-50 animate-slide-up">
+                    <div className="flex items-center justify-between px-4 py-2 border-b border-slate-100">
+                      <div className="flex items-center gap-2">
+                        <span className="font-extrabold text-sm text-slate-900">Notifications</span>
+                        {unreadCount > 0 && (
+                          <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[10px] font-bold">
+                            {unreadCount} new
+                          </span>
+                        )}
+                      </div>
+                      {unreadCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={markAllAsRead}
+                          className="text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:underline"
+                        >
+                          Mark all read
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                      {notifications.length === 0 ? (
+                        <div className="py-8 text-center text-xs text-slate-400">
+                          <Bell className="w-8 h-8 text-slate-300 mx-auto mb-2 opacity-50" />
+                          No notifications yet
+                        </div>
+                      ) : (
+                        notifications.slice(0, 15).map((n) => (
+                          <div
+                            key={n.id}
+                            onClick={() => {
+                              setNotifDropdownOpen(false);
+                              if (n.requestId) {
+                                window.location.href = `/requests/${n.requestId}`;
+                              }
+                            }}
+                            className={`p-3 text-xs hover:bg-slate-50 cursor-pointer transition-colors ${
+                              !n.read ? 'bg-rose-50/40 font-semibold' : ''
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <span className="font-bold text-slate-900 line-clamp-1">{n.title}</span>
+                              <span className="text-[10px] text-slate-400 flex-shrink-0">
+                                {n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-600 mt-0.5 line-clamp-2">{n.body}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* User Session HUD: Signed in vs Signed out */}
             {user ? (
               <div className="flex items-center gap-2">

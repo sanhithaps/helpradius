@@ -544,6 +544,43 @@ class RequestController {
     db.saveRequests();
     return res.json({ message: 'Rating recorded. Thank you for your feedback!', request });
   }
+
+  // Retry emergency contact alert
+  async retryContactAlert(req, res) {
+    const { id, alertIndex } = req.params;
+    const request = db.requests.get(id);
+    if (!request) return res.status(404).json({ error: 'NotFound' });
+
+    if (request.requesterId !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const alerts = db.contactAlerts.get(id) || [];
+    const idx = parseInt(alertIndex, 10);
+    const targetAlert = alerts[idx];
+
+    if (!targetAlert) {
+      return res.status(404).json({ error: 'AlertNotFound', message: 'Alert item not found.' });
+    }
+
+    const updatedAlert = await smsService.sendEmergencyAlert({
+      contactName: targetAlert.contactName,
+      contactPhone: targetAlert.phone,
+      requesterName: request.requesterName,
+      category: request.category,
+      location: request.location,
+      requestId: id
+    });
+
+    alerts[idx] = updatedAlert;
+    db.contactAlerts.set(id, alerts);
+
+    try {
+      emitTo(`user:${request.requesterId}`, 'contact-alert:updated', { requestId: id, contactAlerts: alerts });
+    } catch (_) {}
+
+    return res.json({ message: 'Alert retried', alert: updatedAlert, contactAlerts: alerts });
+  }
 }
 
 module.exports = new RequestController();

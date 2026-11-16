@@ -44,6 +44,7 @@ export default function ActiveRequestPage() {
   const [stars, setStars] = useState(5);
   const [ratingComment, setRatingComment] = useState('');
   const [isSafeChecked, setIsSafeChecked] = useState(true);
+  const [retryingIndex, setRetryingIndex] = useState(null);
 
   // Poll request details and tracking updates
   const fetchDetails = async () => {
@@ -101,6 +102,20 @@ export default function ActiveRequestPage() {
       setContactAlerts(data.contactAlerts);
     }
   });
+
+  const handleRetryAlert = async (idx) => {
+    setRetryingIndex(idx);
+    try {
+      const res = await api.post(`/requests/${id}/contact-alerts/${idx}/retry`);
+      if (res.data?.contactAlerts) {
+        setContactAlerts(res.data.contactAlerts);
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to retry sending alert.');
+    } finally {
+      setRetryingIndex(null);
+    }
+  };
 
   const handleMarkCompleted = async () => {
     try {
@@ -279,28 +294,79 @@ export default function ActiveRequestPage() {
               <h3 className="font-bold text-slate-900 text-sm">Emergency Contacts Alert Stream</h3>
             </div>
             <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 uppercase">
-              Independent of Distance
+              SMS & In-App Alerts
             </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {contactAlerts.map(contact => (
-              <div key={contact.contactId} className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
-                <div>
-                  <span className="font-bold text-slate-900 block">{contact.name} ({contact.relationship})</span>
-                  <span className="text-[11px] text-slate-500 font-mono">{contact.phone}</span>
+            {contactAlerts.map((contact, idx) => {
+              const isSimulated = contact.status === 'simulated' || (!contact.status && contact.deliveryBadge?.includes('Simulated'));
+              const isSent = contact.status === 'sent' || contact.status === 'delivered';
+              const isFailed = contact.status === 'failed';
+
+              return (
+                <div key={contact.contactId || idx} className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col justify-between text-xs gap-2">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <span className="font-bold text-slate-900 block">{contact.name} ({contact.relationship})</span>
+                      <span className="text-[11px] text-slate-500 font-mono">{contact.phone}</span>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <span className="text-[10px] font-semibold text-slate-600 bg-slate-200/60 px-1.5 py-0.5 rounded">
+                          Channel: {contact.inAppDelivered ? 'SMS + In-App' : 'SMS'}
+                        </span>
+                        {contact.inAppDelivered && (
+                          <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
+                            ✓ In-App Alert Sent
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right flex flex-col items-end">
+                      {isSent && (
+                        <span className="inline-flex items-center gap-1 font-bold text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <span>Sent</span>
+                        </span>
+                      )}
+                      {isSimulated && (
+                        <span className="inline-flex items-center gap-1 font-bold text-[10px] text-slate-600 bg-slate-200/70 px-2 py-0.5 rounded-md border border-slate-300" title="Simulated (demo - no real SMS sent)">
+                          <Info className="w-3 h-3 text-slate-500" />
+                          <span>Simulated</span>
+                        </span>
+                      )}
+                      {isFailed && (
+                        <span className="inline-flex items-center gap-1 font-bold text-[11px] text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
+                          <AlertTriangle className="w-3 h-3 text-rose-600" />
+                          <span>Failed</span>
+                        </span>
+                      )}
+                      <span className="block text-[9px] text-slate-400 mt-1">
+                        {contact.timestamp ? new Date(contact.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                      </span>
+                    </div>
+                  </div>
+
+                  {isFailed && (
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-200 text-[11px]">
+                      <span className="text-rose-600 truncate max-w-[150px]">{contact.error || 'Failed to dispatch SMS'}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRetryAlert(idx)}
+                        disabled={retryingIndex === idx}
+                        className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-rose-600 hover:bg-rose-700 text-white disabled:opacity-50 transition-all shadow-sm"
+                      >
+                        {retryingIndex === idx ? 'Retrying...' : 'Retry SMS'}
+                      </button>
+                    </div>
+                  )}
+                  {isSimulated && (
+                    <p className="text-[10px] text-slate-400 italic pt-1 border-t border-slate-200/50">
+                      Simulated (demo – no real SMS sent)
+                    </p>
+                  )}
                 </div>
-                <div className="text-right">
-                  <span className="inline-flex items-center gap-1 font-bold text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                    <span>{contact.deliveryBadge || 'Delivered ✓'}</span>
-                  </span>
-                  <span className="block text-[9px] text-slate-400 mt-0.5">
-                    {new Date(contact.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
