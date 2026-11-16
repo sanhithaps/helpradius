@@ -218,6 +218,85 @@ function initIO(httpServer) {
       });
     });
 
+    // Phase 4: WebRTC Voice Calling Signalling
+    socket.on('call:invite', ({ requestId }, callback) => {
+      const request = db.requests.get(requestId);
+      if (!request || (request.status !== 'accepted' && request.status !== 'in_progress')) {
+        if (callback) callback({ error: 'InvalidCallState', message: 'Voice calling is only available during active assistance sessions.' });
+        return;
+      }
+
+      // Ensure user is participant
+      if (request.requesterId !== userId && request.acceptedHelperId !== userId) {
+        if (callback) callback({ error: 'Forbidden', message: 'You are not a participant in this request.' });
+        return;
+      }
+
+      const calleeId = request.requesterId === userId ? request.acceptedHelperId : request.requesterId;
+      const callId = `call_${Date.now()}`;
+
+      // Emit incoming call event to recipient user room
+      io.to(`user:${calleeId}`).emit('call:incoming', {
+        requestId,
+        callId,
+        callerId: userId,
+        callerName: socket.user.name
+      });
+
+      if (callback) callback({ success: true, callId, calleeId });
+    });
+
+    socket.on('call:accept', ({ requestId, callId, callerId }) => {
+      io.to(`user:${callerId}`).emit('call:accepted', { requestId, callId, calleeId: userId });
+    });
+
+    socket.on('call:decline', ({ requestId, callId, callerId }) => {
+      io.to(`user:${callerId}`).emit('call:declined', { requestId, callId });
+    });
+
+    socket.on('call:cancel', ({ requestId, callId, calleeId }) => {
+      io.to(`user:${calleeId}`).emit('call:cancelled', { requestId, callId });
+    });
+
+    socket.on('call:end', ({ requestId, callId, targetUserId, durationSeconds }) => {
+      if (targetUserId) {
+        io.to(`user:${targetUserId}`).emit('call:ended', { requestId, callId, durationSeconds });
+      }
+
+      // Save call duration or missed status in chat log
+      if (requestId) {
+        const secs = durationSeconds || 0;
+        const durationText = secs > 0
+          ? `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
+          : 'Missed';
+        const msg = {
+          id: `msg_call_${Date.now()}`,
+          senderId: 'system',
+          senderName: 'Voice Call',
+          type: 'system',
+          text: `📞 Voice Call – ${durationText}`,
+          createdAt: new Date().toISOString()
+        };
+        const messages = db.messages.get(requestId) || [];
+        messages.push(msg);
+        db.messages.set(requestId, messages);
+        db.saveMessages();
+        io.to(`request:${requestId}`).emit('chat:message', { requestId, message: msg });
+      }
+    });
+
+    socket.on('call:offer', ({ requestId, callId, targetUserId, sdp }) => {
+      io.to(`user:${targetUserId}`).emit('call:offer', { requestId, callId, sdp, fromUserId: userId });
+    });
+
+    socket.on('call:answer', ({ requestId, callId, targetUserId, sdp }) => {
+      io.to(`user:${targetUserId}`).emit('call:answer', { requestId, callId, sdp, fromUserId: userId });
+    });
+
+    socket.on('call:ice', ({ requestId, callId, targetUserId, candidate }) => {
+      io.to(`user:${targetUserId}`).emit('call:ice', { requestId, callId, candidate, fromUserId: userId });
+    });
+
     // Helper toggle availability
     socket.on('helpers:toggle-available', ({ isAvailable }) => {
       if (isAvailable) {

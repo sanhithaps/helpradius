@@ -3,9 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSocket, useSocketEvent } from '../context/SocketContext';
 import { useLiveLocation } from '../hooks/useLiveLocation';
+import { useWebRTCCall } from '../hooks/useWebRTCCall';
 import TrackingMap from '../components/TrackingMap';
 import LocationPickerMap from '../components/LocationPickerMap';
-import VoiceCallModal from '../components/VoiceCallModal';
+import WebRTCCallOverlay from '../components/WebRTCCallOverlay';
 import PricingBreakdownCard from '../components/PricingBreakdownCard';
 import api from '../services/api';
 import confetti from 'canvas-confetti';
@@ -38,7 +39,7 @@ export default function ActiveRequestPage() {
   const [contactAlerts, setContactAlerts] = useState([]);
   const [trackingSession, setTrackingSession] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [callModalOpen, setCallModalOpen] = useState(false);
+  const webrtc = useWebRTCCall();
   const [ratingModalOpen, setRatingModalOpen] = useState(false);
   const [stars, setStars] = useState(5);
   const [ratingComment, setRatingComment] = useState('');
@@ -382,7 +383,7 @@ export default function ActiveRequestPage() {
               </button>
 
               <button
-                onClick={() => setCallModalOpen(true)}
+                onClick={() => webrtc.startCall(request.id, helper?.name || 'Helper')}
                 className="flex-1 sm:flex-none px-4 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow flex items-center justify-center gap-2"
               >
                 <Phone className="w-4 h-4" />
@@ -473,13 +474,17 @@ export default function ActiveRequestPage() {
         </div>
       )}
 
-      {/* IN-APP VOICE CALL MODAL */}
-      <VoiceCallModal
-        isOpen={callModalOpen}
-        onClose={() => setCallModalOpen(false)}
-        requestId={request.id}
-        participantName={helper?.name || 'Helper'}
-        isIncoming={false}
+      {/* IN-APP WEBRTC VOICE CALL OVERLAY */}
+      <WebRTCCallOverlay
+        callState={webrtc.callState}
+        callInfo={webrtc.callInfo}
+        isMuted={webrtc.isMuted}
+        callDuration={webrtc.callDuration}
+        errorMessage={webrtc.errorMessage}
+        onAccept={webrtc.acceptCall}
+        onDecline={webrtc.declineCall}
+        onEnd={webrtc.endCall}
+        onToggleMute={webrtc.toggleMute}
       />
 
       {/* RATING & "I'M SAFE" MODAL */}

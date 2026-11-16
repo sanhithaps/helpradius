@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSocket, useSocketEvent } from '../context/SocketContext';
+import { useWebRTCCall } from '../hooks/useWebRTCCall';
 import VoiceNoteRecorder from '../components/VoiceNoteRecorder';
-import VoiceCallModal from '../components/VoiceCallModal';
+import WebRTCCallOverlay from '../components/WebRTCCallOverlay';
 import api from '../services/api';
 import {
   Send,
@@ -30,9 +31,10 @@ export default function ChatPage() {
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
-  const [callModalOpen, setCallModalOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [typingUser, setTypingUser] = useState(null);
+
+  const webrtc = useWebRTCCall();
 
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
@@ -231,9 +233,9 @@ export default function ChatPage() {
           <div className="flex items-center gap-2">
             {!isLocked && (
               <button
-                onClick={() => setCallModalOpen(true)}
+                onClick={() => webrtc.startCall(id, 'Connected Volunteer')}
                 className="p-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center gap-1.5 text-xs font-bold"
-                title="In-App Voice Call"
+                title="In-App Voice Call (WebRTC)"
               >
                 <Phone className="w-4 h-4" />
                 <span className="hidden sm:inline">Call</span>
@@ -411,12 +413,16 @@ export default function ChatPage() {
         )}
       </div>
 
-      <VoiceCallModal
-        isOpen={callModalOpen}
-        onClose={() => setCallModalOpen(false)}
-        requestId={id}
-        participantName="Connected Helper"
-        isIncoming={false}
+      <WebRTCCallOverlay
+        callState={webrtc.callState}
+        callInfo={webrtc.callInfo}
+        isMuted={webrtc.isMuted}
+        callDuration={webrtc.callDuration}
+        errorMessage={webrtc.errorMessage}
+        onAccept={webrtc.acceptCall}
+        onDecline={webrtc.declineCall}
+        onEnd={webrtc.endCall}
+        onToggleMute={webrtc.toggleMute}
       />
     </div>
   );
