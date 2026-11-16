@@ -91,12 +91,12 @@ export const AuthProvider = ({ children }) => {
 
   // Toggle helper availability
   const toggleAvailability = async () => {
-    if (!helperProfile) return;
     try {
+      const nextAvailable = helperProfile ? !helperProfile.isAvailable : true;
       const res = await api.patch('/helpers/me/availability', {
-        isAvailable: !helperProfile.isAvailable
+        isAvailable: nextAvailable
       });
-      setHelperProfile(prev => ({ ...prev, isAvailable: res.data.isAvailable }));
+      setHelperProfile(prev => ({ ...(prev || res.data.helper || {}), isAvailable: res.data.isAvailable }));
     } catch (e) {
       console.error('Failed to toggle availability', e);
     }
