@@ -2,9 +2,9 @@ name: Help Radius CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, 'fix/**', 'feature/**' ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main, develop, 'fix/**', 'feature/**' ]
 
 jobs:
   test-and-build:
