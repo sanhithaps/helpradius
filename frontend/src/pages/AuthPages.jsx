@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   AlertTriangle,
@@ -20,17 +20,31 @@ import {
   Wrench,
   Car,
   IdCard,
-  CreditCard
+  CreditCard,
+  Check,
+  Sparkles,
+  RefreshCw,
+  LogOut
 } from 'lucide-react';
 
 export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  useEffect(() => {
+    // Check if redirected from register page with prefilled email
+    const params = new URLSearchParams(location.search);
+    const prefill = params.get('email') || location.state?.identifier;
+    if (prefill) {
+      setIdentifier(prefill);
+    }
+  }, [location]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -77,7 +91,7 @@ export function LoginPage() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} noValidate className="space-y-4">
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
               Email Address or Mobile Number
@@ -115,7 +129,7 @@ export function LoginPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="w-full py-3.5 rounded-2xl bg-rose-600 hover:bg-rose-700 active:scale-[0.99] text-white font-extrabold text-sm shadow-md shadow-rose-600/30 transition-all flex items-center justify-center gap-2"
+            className="w-full py-3.5 rounded-2xl bg-rose-600 hover:bg-rose-700 active:scale-[0.99] text-white font-extrabold text-sm shadow-md shadow-rose-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
           >
             {submitting ? (
               <span>Verifying Credentials...</span>
@@ -140,7 +154,7 @@ export function LoginPage() {
 }
 
 export function RegisterPage() {
-  const { register, userLocation } = useAuth();
+  const { user, register, userLocation, logout } = useAuth();
   const navigate = useNavigate();
 
   const [step, setStep] = useState(1);
@@ -150,7 +164,7 @@ export function RegisterPage() {
   // Step 1: Personal Profile & Verification ID
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('+91');
+  const [phoneDigits, setPhoneDigits] = useState(''); // Just the 10 digits
   const [idType, setIdType] = useState('Aadhaar Card');
   const [verificationId, setVerificationId] = useState('');
   const [password, setPassword] = useState('');
@@ -159,14 +173,18 @@ export function RegisterPage() {
   const [accountType, setAccountType] = useState('user'); // 'user' (Requester) or 'helper' (Volunteer)
 
   useEffect(() => {
-    if ((!address || address === 'Acquiring live device GPS...') && userLocation?.address && userLocation.address !== 'Acquiring live device GPS...') {
+    if (
+      (!address || address === 'Acquiring live device GPS...') &&
+      userLocation?.address &&
+      userLocation.address !== 'Acquiring live device GPS...'
+    ) {
       setAddress(userLocation.address);
     }
   }, [userLocation?.address]);
 
   // Step 2: Emergency Contact & Volunteer Specifics
   const [contactName, setContactName] = useState('');
-  const [contactPhone, setContactPhone] = useState('+91');
+  const [contactPhoneDigits, setContactPhoneDigits] = useState('');
   const [contactRelation, setContactRelation] = useState('Parent');
 
   // Helper categories (if accountType === 'helper')
@@ -188,65 +206,85 @@ export function RegisterPage() {
     );
   };
 
-  const handleStep1Next = (e) => {
-    e.preventDefault();
+  const generateSafetyId = () => {
+    const randomNum = Math.floor(100000 + Math.random() * 900000);
+    setVerificationId(`AID-${randomNum}`);
+  };
+
+  const setErrorWithScroll = (msg) => {
+    setErrorMessage(msg);
+    setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 50);
+  };
+
+  // Validations
+  const validateProfileFields = () => {
     if (!name.trim()) {
-      setErrorMessage('Please enter your full name.');
-      return;
+      setErrorWithScroll('Please enter your full legal name.');
+      return false;
     }
     if (!email.trim() || !email.includes('@')) {
-      setErrorMessage('Please enter a valid email address.');
-      return;
+      setErrorWithScroll('Please enter a valid email address (e.g. name@example.com).');
+      return false;
     }
-    if (!phone.trim() || phone.trim() === '+91') {
-      setErrorMessage('Please enter your mobile phone number.');
-      return;
+    const cleanDigits = phoneDigits.replace(/\D/g, '');
+    if (!cleanDigits || cleanDigits.length < 10) {
+      setErrorWithScroll('Please enter a valid 10-digit mobile phone number.');
+      return false;
     }
-    if (!verificationId.trim()) {
-      setErrorMessage('Please enter your Verification ID number (e.g. Aadhaar / Voter ID / Student ID).');
-      return;
-    }
-    const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
-    if (!password || !passwordRegex.test(password)) {
-      setErrorMessage('Password must be at least 8 characters long and contain at least one letter and one number.');
-      return;
+    if (!password || password.length < 6) {
+      setErrorWithScroll('Password must be at least 6 characters long.');
+      return false;
     }
     if (password !== confirmPassword) {
-      setErrorMessage('Passwords do not match. Please re-enter your password.');
-      return;
+      setErrorWithScroll('Passwords do not match. Please re-enter your password.');
+      return false;
     }
+    return true;
+  };
 
+  const handleStep1Next = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!validateProfileFields()) return;
     setErrorMessage('');
     setStep(2);
   };
 
   const handleStep2Next = (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     setErrorMessage('');
     setStep(3);
   };
 
-  const handleRegister = async () => {
+  const performRegistration = async () => {
     setSubmitting(true);
     setErrorMessage('');
 
     try {
-      const emergencyContacts = contactName.trim() && contactPhone.trim() && contactPhone.trim() !== '+91' ? [
+      const formattedPhone = `+91${phoneDigits.replace(/\D/g, '').slice(-10)}`;
+      const cleanContactPhone = contactPhoneDigits.trim()
+        ? `+91${contactPhoneDigits.replace(/\D/g, '').slice(-10)}`
+        : '';
+
+      const emergencyContacts = contactName.trim() && cleanContactPhone ? [
         {
           name: contactName.trim(),
-          phone: contactPhone.trim(),
+          phone: cleanContactPhone,
           relationship: contactRelation
         }
       ] : [];
 
+      const finalVerificationId = verificationId.trim() || `AID-${Math.floor(100000 + Math.random() * 900000)}`;
+
       await register({
         name: name.trim(),
         email: email.toLowerCase().trim(),
-        phone: phone.trim(),
-        verificationId: verificationId.trim(),
+        phone: formattedPhone,
+        verificationId: finalVerificationId,
         idType,
         password,
-        address: address.trim(),
+        address: address.trim() || userLocation?.address || 'Current Location',
         role: accountType,
         isHelper: accountType === 'helper',
         helperCategories: accountType === 'helper' ? selectedCategories : [],
@@ -264,60 +302,138 @@ export function RegisterPage() {
 
       navigate('/dashboard');
     } catch (e) {
-      setErrorMessage(e.response?.data?.message || 'Registration failed. Please check details and try again.');
-      setStep(1);
+      const msg = e.response?.data?.message || 'Registration failed. Please check details and try again.';
+      setErrorWithScroll(msg);
     } finally {
       setSubmitting(false);
     }
   };
 
+  const handleQuickRegister = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!validateProfileFields()) return;
+    await performRegistration();
+  };
+
+  // Password indicators
+  const hasMinLength = password.length >= 6;
+  const hasLetterAndNumber = /(?=.*[A-Za-z])(?=.*\d)/.test(password);
+  const passwordsMatch = password.length > 0 && confirmPassword.length > 0 && password === confirmPassword;
+
+  // Render error component helper with direct sign-in button if conflict
+  const renderErrorBanner = () => {
+    if (!errorMessage) return null;
+    const isConflict = errorMessage.toLowerCase().includes('already exists') || errorMessage.toLowerCase().includes('log in');
+
+    return (
+      <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-800 space-y-2 animate-shake">
+        <div className="flex items-start gap-2.5">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0 text-rose-600 mt-0.5" />
+          <span className="font-semibold leading-relaxed">{errorMessage}</span>
+        </div>
+        {isConflict && (
+          <div className="pt-2 pl-6 flex items-center gap-3">
+            <Link
+              to={`/login?email=${encodeURIComponent(email.toLowerCase().trim())}`}
+              className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-sm transition-all inline-flex items-center gap-1.5"
+            >
+              <span>Sign In with this Email</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+            <span className="text-[11px] text-slate-500">Your account already exists in the system.</span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
-    <div className="max-w-2xl mx-auto px-4 py-10 space-y-6">
+    <div className="max-w-2xl mx-auto px-4 py-8 sm:py-12 space-y-6">
+      {/* Session notice if already logged in */}
+      {user && (
+        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-900">
+          <div>
+            <span>You are currently signed in as <strong>{user.name}</strong> ({user.email}).</span>
+            <span className="block text-[11px] text-amber-700 mt-0.5">
+              Registering will create a new account and switch your active session.
+            </span>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Link
+              to="/dashboard"
+              className="px-3 py-1.5 rounded-xl bg-amber-700 hover:bg-amber-800 text-white font-bold text-xs transition-colors"
+            >
+              Open Dashboard
+            </Link>
+            <button
+              type="button"
+              onClick={logout}
+              className="px-3 py-1.5 rounded-xl bg-white border border-amber-300 text-amber-800 font-bold text-xs hover:bg-amber-100 transition-colors flex items-center gap-1"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Sign Out</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="text-center space-y-2">
         <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
           Help Radius Registration
         </h1>
         <p className="text-xs text-slate-500">
-          Enter your personal and verification details to create and verify your account
+          Create your account for live community assistance, SOS emergencies, and volunteer rescue
         </p>
 
-        {/* Stepper HUD */}
+        {/* Stepper HUD (Clickable) */}
         <div className="flex items-center justify-center gap-2 pt-2">
-          <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all ${
-            step === 1 ? 'bg-rose-600 text-white' : 'bg-slate-100 text-slate-600'
-          }`}>
+          <button
+            type="button"
+            onClick={() => setStep(1)}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+              step === 1 ? 'bg-rose-600 text-white shadow-sm shadow-rose-600/30' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
             <span>1</span>
-            <span>Profile & ID</span>
-          </div>
+            <span>Profile & Account</span>
+          </button>
           <div className="w-4 h-0.5 bg-slate-200" />
-          <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all ${
-            step === 2 ? 'bg-rose-600 text-white' : 'bg-slate-100 text-slate-600'
-          }`}>
+          <button
+            type="button"
+            onClick={() => {
+              if (validateProfileFields()) setStep(2);
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+              step === 2 ? 'bg-rose-600 text-white shadow-sm shadow-rose-600/30' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
             <span>2</span>
-            <span>{accountType === 'helper' ? 'Volunteer Setup' : 'Emergency Contact'}</span>
-          </div>
+            <span>{accountType === 'helper' ? 'Volunteer Capabilities' : 'Emergency Contact'}</span>
+          </button>
           <div className="w-4 h-0.5 bg-slate-200" />
-          <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all ${
-            step === 3 ? 'bg-rose-600 text-white' : 'bg-slate-100 text-slate-600'
-          }`}>
+          <button
+            type="button"
+            onClick={() => {
+              if (validateProfileFields()) setStep(3);
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+              step === 3 ? 'bg-rose-600 text-white shadow-sm shadow-rose-600/30' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
             <span>3</span>
-            <span>Confirmation</span>
-          </div>
+            <span>Review & Consents</span>
+          </button>
         </div>
       </div>
 
       <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6">
-        {errorMessage && (
-          <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 flex-shrink-0 text-rose-600 mt-0.5" />
-            <span>{errorMessage}</span>
-          </div>
-        )}
+        {/* Top Error Message Banner */}
+        {renderErrorBanner()}
 
         {/* STEP 1: PERSONAL DETAILS, ID VERIFICATION & ROLE */}
         {step === 1 && (
-          <form onSubmit={handleStep1Next} className="space-y-5">
+          <form onSubmit={handleQuickRegister} noValidate className="space-y-5">
             {/* Account Type Selector */}
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
@@ -382,8 +498,7 @@ export function RegisterPage() {
                     placeholder="Enter your full legal name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full p-3.5 pl-10 rounded-2xl border border-slate-200 text-sm outline-none focus:border-rose-500"
-                    required
+                    className="w-full p-3.5 pl-10 rounded-2xl border border-slate-200 text-sm outline-none focus:border-rose-500 transition-colors"
                   />
                   <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-4" />
                 </div>
@@ -399,8 +514,7 @@ export function RegisterPage() {
                     placeholder="yourname@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full p-3.5 pl-10 rounded-2xl border border-slate-200 text-sm outline-none focus:border-rose-500"
-                    required
+                    className="w-full p-3.5 pl-10 rounded-2xl border border-slate-200 text-sm outline-none focus:border-rose-500 transition-colors"
                   />
                   <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-4" />
                 </div>
@@ -413,17 +527,24 @@ export function RegisterPage() {
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                   Mobile Number *
                 </label>
-                <div className="relative">
+                <div className="flex rounded-2xl border border-slate-200 overflow-hidden focus-within:border-rose-500 transition-colors bg-white">
+                  <span className="bg-slate-100 text-slate-700 px-3.5 py-3.5 text-xs font-extrabold flex items-center border-r border-slate-200 select-none">
+                    +91
+                  </span>
                   <input
                     type="tel"
-                    placeholder="+919876543210"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="w-full p-3.5 pl-10 rounded-2xl border border-slate-200 text-sm outline-none focus:border-rose-500 font-mono"
-                    required
+                    placeholder="9876543210 (10 digits)"
+                    value={phoneDigits}
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      setPhoneDigits(digits);
+                    }}
+                    className="w-full p-3.5 text-sm outline-none font-mono"
                   />
-                  <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-4" />
                 </div>
+                <span className="text-[10px] text-slate-400 block mt-1">
+                  Enter 10-digit mobile number (used for emergency SMS broadcasts)
+                </span>
               </div>
 
               <div>
@@ -436,23 +557,37 @@ export function RegisterPage() {
                     placeholder="e.g. Current street, neighborhood or city"
                     value={address}
                     onChange={(e) => setAddress(e.target.value)}
-                    className="w-full p-3.5 pl-10 rounded-2xl border border-slate-200 text-sm outline-none focus:border-rose-500"
+                    className="w-full p-3.5 pl-10 rounded-2xl border border-slate-200 text-sm outline-none focus:border-rose-500 transition-colors"
                   />
                   <MapPin className="w-4 h-4 text-slate-400 absolute left-3.5 top-4" />
                 </div>
+                <span className="text-[10px] text-slate-400 block mt-1">
+                  Auto-detected from live device GPS when location is enabled
+                </span>
               </div>
             </div>
 
-            {/* VERIFICATION ID SECTION (REQUIRED) */}
+            {/* VERIFICATION ID SECTION (OPTIONAL / AUTO-ASSIGN) */}
             <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-              <div className="flex items-center gap-2">
-                <IdCard className="w-5 h-5 text-rose-600" />
-                <span className="font-extrabold text-xs text-slate-900 uppercase tracking-wider">
-                  Identity Verification ID Details *
-                </span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <IdCard className="w-5 h-5 text-rose-600" />
+                  <span className="font-extrabold text-xs text-slate-900 uppercase tracking-wider">
+                    Identity Verification ID (Safety & Trust)
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={generateSafetyId}
+                  className="px-2.5 py-1 rounded-lg bg-white border border-slate-300 text-slate-700 hover:border-rose-500 text-[11px] font-bold flex items-center gap-1 transition-all"
+                  title="Auto-assign unique Safety ID"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Auto-Assign ID</span>
+                </button>
               </div>
               <p className="text-[11px] text-slate-500">
-                Required for safety verification and emergency accountability.
+                Provide your Aadhaar / Student / Gov ID, or click Auto-Assign for an instant simulated safety ID. Only masked digits are saved.
               </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -476,75 +611,108 @@ export function RegisterPage() {
 
                 <div>
                   <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
-                    Verification ID Number *
+                    Verification ID Number
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. 1234-5678-9012 or DL-12345"
+                    placeholder="e.g. 1234-5678-9012 or AID-9821"
                     value={verificationId}
                     onChange={(e) => setVerificationId(e.target.value)}
                     className="w-full p-3 rounded-xl border border-slate-200 text-xs outline-none focus:border-rose-500 font-mono font-bold"
-                    required
                   />
                 </div>
-              </div>
-
-              <div className="flex items-start gap-2 pt-1 text-[11px] text-slate-500">
-                <input type="checkbox" defaultChecked required className="mt-0.5 rounded text-rose-600 focus:ring-rose-500" />
-                <span>My ID is used only for manual helper verification; only the last 4 digits are stored.</span>
               </div>
             </div>
 
             {/* Password & Confirm Password */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Create Password *
-                </label>
-                <div className="relative">
-                  <input
-                    type="password"
-                    placeholder="Min 8 chars (letters & numbers)"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full p-3.5 pl-10 rounded-2xl border border-slate-200 text-sm outline-none focus:border-rose-500"
-                    required
-                  />
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-4" />
+            <div className="space-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Create Password *
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="password"
+                      placeholder="Min 6 characters"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full p-3.5 pl-10 rounded-2xl border border-slate-200 text-sm outline-none focus:border-rose-500 transition-colors"
+                    />
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-4" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Confirm Password *
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="password"
+                      placeholder="Re-enter password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="w-full p-3.5 pl-10 rounded-2xl border border-slate-200 text-sm outline-none focus:border-rose-500 transition-colors"
+                    />
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-4" />
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Confirm Password *
-                </label>
-                <div className="relative">
-                  <input
-                    type="password"
-                    placeholder="Re-enter password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full p-3.5 pl-10 rounded-2xl border border-slate-200 text-sm outline-none focus:border-rose-500"
-                    required
-                  />
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-4" />
+              {/* Live Password Indicator Badges */}
+              <div className="flex flex-wrap items-center gap-3 pt-1 text-[11px]">
+                <div className={`flex items-center gap-1 font-semibold ${hasMinLength ? 'text-emerald-600' : 'text-slate-400'}`}>
+                  <Check className={`w-3.5 h-3.5 ${hasMinLength ? 'text-emerald-600' : 'text-slate-300'}`} />
+                  <span>At least 6 characters</span>
                 </div>
+                <div className={`flex items-center gap-1 font-semibold ${hasLetterAndNumber ? 'text-emerald-600' : 'text-slate-400'}`}>
+                  <Check className={`w-3.5 h-3.5 ${hasLetterAndNumber ? 'text-emerald-600' : 'text-slate-300'}`} />
+                  <span>Contains letters & numbers</span>
+                </div>
+                {confirmPassword && (
+                  <div className={`flex items-center gap-1 font-semibold ${passwordsMatch ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    <Check className={`w-3.5 h-3.5 ${passwordsMatch ? 'text-emerald-600' : 'text-rose-400'}`} />
+                    <span>{passwordsMatch ? 'Passwords match' : 'Passwords do not match'}</span>
+                  </div>
+                )}
               </div>
             </div>
 
-            <button
-              type="submit"
-              className="w-full py-4 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-sm shadow-md shadow-rose-600/30 transition-all flex items-center justify-center gap-2"
-            >
-              <span>Continue to Next Step</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
+            {/* Error banner above action buttons */}
+            {renderErrorBanner()}
+
+            {/* Action Buttons: Quick Register OR Step-by-Step */}
+            <div className="space-y-3 pt-2">
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full py-4 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-black text-sm shadow-md shadow-rose-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {submitting ? (
+                  <span>Registering Account in Database...</span>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-5 h-5 text-emerald-300" />
+                    <span>Create Account & Open Dashboard</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleStep1Next}
+                className="w-full py-3 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs border border-slate-200 transition-colors flex items-center justify-center gap-2"
+              >
+                <span>Optional: Configure Emergency Contact & Role Settings &rarr;</span>
+              </button>
+            </div>
           </form>
         )}
 
         {/* STEP 2: SAFETY CONTACTS & VOLUNTEER CAPABILITIES */}
         {step === 2 && (
-          <form onSubmit={handleStep2Next} className="space-y-6">
+          <form onSubmit={handleStep2Next} noValidate className="space-y-6">
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-5 h-5 text-emerald-600" />
@@ -553,7 +721,7 @@ export function RegisterPage() {
                 </h3>
               </div>
               <p className="text-xs text-slate-500">
-                Enter your real family or friend contact. This contact will be automatically broadcast whenever you trigger Emergency SOS.
+                Optional: Enter a family member or friend. This contact will be automatically alerted via SMS broadcast whenever you trigger Emergency SOS.
               </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -570,13 +738,18 @@ export function RegisterPage() {
 
                 <div>
                   <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Mobile Number</label>
-                  <input
-                    type="tel"
-                    placeholder="+919876543210"
-                    value={contactPhone}
-                    onChange={(e) => setContactPhone(e.target.value)}
-                    className="w-full p-3 rounded-xl border border-slate-200 text-xs outline-none focus:border-rose-500 font-mono"
-                  />
+                  <div className="flex rounded-xl border border-slate-200 overflow-hidden focus-within:border-rose-500 bg-white">
+                    <span className="bg-slate-100 text-slate-600 px-2.5 py-2.5 text-xs font-bold flex items-center border-r border-slate-200">
+                      +91
+                    </span>
+                    <input
+                      type="tel"
+                      placeholder="9876543210"
+                      value={contactPhoneDigits}
+                      onChange={(e) => setContactPhoneDigits(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                      className="w-full p-2.5 text-xs outline-none font-mono"
+                    />
+                  </div>
                 </div>
 
                 <div>
@@ -638,19 +811,22 @@ export function RegisterPage() {
               </div>
             )}
 
+            {/* Error banner above action buttons */}
+            {renderErrorBanner()}
+
             <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="py-3.5 px-6 rounded-2xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50"
+                className="py-3.5 px-6 rounded-2xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors"
               >
-                Back
+                Back to Profile
               </button>
               <button
                 type="submit"
                 className="flex-1 py-4 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-sm shadow-md transition-all flex items-center justify-center gap-2"
               >
-                <span>Continue to Confirmation</span>
+                <span>Continue to Review & Consents</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
@@ -665,17 +841,17 @@ export function RegisterPage() {
               <div className="text-xs text-slate-600 space-y-1">
                 <div><strong>Full Name:</strong> {name}</div>
                 <div><strong>Email:</strong> {email}</div>
-                <div><strong>Mobile:</strong> {phone}</div>
-                <div><strong>Verification ID:</strong> {`XXXX-XXXX-${verificationId.slice(-4)}`} ({idType})</div>
+                <div><strong>Mobile:</strong> {`+91${phoneDigits}`}</div>
+                <div><strong>Verification ID:</strong> {verificationId ? `XXXX-XXXX-${verificationId.slice(-4)}` : 'Auto-Assigned Safety ID'} ({idType})</div>
                 <div><strong>Account Role:</strong> {accountType === 'helper' ? 'Volunteer Helper' : 'Community Requester'}</div>
-                <div><strong>Primary Emergency Contact:</strong> {contactName ? `${contactName} (${contactPhone}) - ${contactRelation}` : 'None added (can add anytime in Profile)'}</div>
+                <div><strong>Primary Emergency Contact:</strong> {contactName ? `${contactName} (+91${contactPhoneDigits}) - ${contactRelation}` : 'None added (can add anytime in Profile)'}</div>
               </div>
             </div>
 
             {/* Permissions */}
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-              <span className="text-xs font-bold text-slate-800 uppercase block">Required Device Permissions</span>
-              
+              <span className="text-xs font-bold text-slate-800 uppercase block">Device Permissions</span>
+
               <label className="flex items-start gap-2.5 cursor-pointer text-xs">
                 <input
                   type="checkbox"
@@ -701,19 +877,22 @@ export function RegisterPage() {
               </label>
             </div>
 
+            {/* Error banner above action buttons */}
+            {renderErrorBanner()}
+
             <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => setStep(2)}
-                className="py-3.5 px-6 rounded-2xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50"
+                className="py-3.5 px-6 rounded-2xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors"
               >
                 Back
               </button>
               <button
                 type="button"
-                onClick={handleRegister}
+                onClick={performRegistration}
                 disabled={submitting}
-                className="flex-1 py-4 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-sm shadow-md transition-all flex items-center justify-center gap-2"
+                className="flex-1 py-4 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-sm shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {submitting ? (
                   <span>Registering Account in Database...</span>

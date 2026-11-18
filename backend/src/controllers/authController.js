@@ -68,23 +68,28 @@ class AuthController {
       return res.status(400).json({ error: 'ValidationError', message: 'Mobile phone number is required.' });
     }
 
-    // Password validation: at least 8 characters with letter and number
-    if (!password || !PASSWORD_REGEX.test(password)) {
+    // Password validation: at least 6 characters (recommended 8+ with letters and numbers)
+    if (!password || password.length < 6) {
       return res.status(400).json({
         error: 'ValidationError',
-        message: 'Password must be at least 8 characters long and contain at least one letter and one number.'
+        message: 'Password must be at least 6 characters long.'
       });
     }
 
-    if (!verificationId || !verificationId.trim()) {
-      return res.status(400).json({
-        error: 'ValidationError',
-        message: 'Verification ID Number (e.g. Aadhaar, Voter ID, Driving License, Student ID) is required.'
-      });
-    }
+    // Auto-generate or sanitize verification ID if not provided
+    const effectiveVerificationId = (verificationId && String(verificationId).trim())
+      ? String(verificationId).trim()
+      : `AID-${Math.floor(100000 + Math.random() * 900000)}`;
 
     const cleanEmail = email.toLowerCase().trim();
-    const cleanPhone = phone.trim();
+    let cleanPhone = phone.trim();
+    // Normalize cleanPhone: if 10 digits without country code, prefix +91
+    const rawDigits = cleanPhone.replace(/\D/g, '');
+    if (rawDigits.length === 10) {
+      cleanPhone = `+91${rawDigits}`;
+    } else if (rawDigits.length === 12 && rawDigits.startsWith('91')) {
+      cleanPhone = `+${rawDigits}`;
+    }
 
     // Check duplicate email / phone
     for (const u of db.users.values()) {
@@ -94,7 +99,12 @@ class AuthController {
           message: 'An account with this email already exists. Please log in instead.'
         });
       }
-      if (u.phone && (u.phone === cleanPhone || u.phone.replace(/[^0-9]/g, '') === cleanPhone.replace(/[^0-9]/g, ''))) {
+      const existingDigits = (u.phone || '').replace(/\D/g, '');
+      const newDigits = cleanPhone.replace(/\D/g, '');
+      if (
+        (existingDigits && newDigits && existingDigits === newDigits) ||
+        (existingDigits.length >= 10 && newDigits.length >= 10 && existingDigits.slice(-10) === newDigits.slice(-10))
+      ) {
         return res.status(400).json({
           error: 'ConflictError',
           message: 'An account with this mobile number already exists. Please log in instead.'
@@ -108,7 +118,7 @@ class AuthController {
     const wantsToBeHelper = Boolean(isHelper || role === 'helper');
 
     // Secure ID handling: never store raw full ID number, mask to last 4
-    const cleanId = String(verificationId).replace(/[^a-zA-Z0-9]/g, '');
+    const cleanId = String(effectiveVerificationId).replace(/[^a-zA-Z0-9]/g, '');
     const last4 = cleanId.length >= 4 ? cleanId.slice(-4) : cleanId.padStart(4, 'X');
     const idLast4 = `XXXX-XXXX-${last4}`;
 
