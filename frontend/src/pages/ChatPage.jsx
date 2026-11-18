@@ -10,6 +10,9 @@ import {
   Send,
   Phone,
   Image,
+  Video,
+  Camera,
+  Loader2,
   Mic,
   MoreVertical,
   ShieldAlert,
@@ -30,6 +33,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [typingUser, setTypingUser] = useState(null);
@@ -38,6 +42,8 @@ export default function ChatPage() {
 
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const photoInputRef = useRef(null);
+  const videoInputRef = useRef(null);
 
   // Initial load via REST
   const fetchChat = async () => {
@@ -169,16 +175,40 @@ export default function ChatPage() {
     setShowVoiceRecorder(false);
   };
 
-  const handleSimulatePhoto = () => {
-    handleSendMessage({
-      type: 'image',
-      text: 'Shared photo',
-      media: {
-        type: 'image',
-        url: 'https://images.unsplash.com/photo-1584432810601-6c7f27d2362b?w=600',
-        fileName: 'location_snapshot.jpg'
+  const handleDeviceFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 50 * 1024 * 1024) {
+      alert(`File "${file.name}" exceeds the 50MB limit.`);
+      if (e.target) e.target.value = '';
+      return;
+    }
+
+    setUploadingMedia(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await api.post('/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      if (res.data?.file) {
+        const uploaded = res.data.file;
+        handleSendMessage({
+          type: uploaded.type,
+          text: uploaded.type === 'video' ? '🎥 Video message' : '📷 Photo message',
+          media: uploaded
+        });
       }
-    });
+    } catch (err) {
+      console.error('Failed to upload file from device', err);
+      alert('Could not upload file from device. Please check format and try again.');
+    } finally {
+      setUploadingMedia(false);
+      if (e.target) e.target.value = '';
+    }
   };
 
   const handleReport = async () => {
@@ -297,16 +327,32 @@ export default function ChatPage() {
                   {msg.text && <p className="text-sm leading-relaxed">{msg.text}</p>}
 
                   {/* Photo Preview */}
-                  {msg.media?.type === 'image' && (
-                    <div className="rounded-xl overflow-hidden mt-1 max-h-48">
-                      <img src={msg.media.url} alt="Attached" className="w-full h-full object-cover" />
+                  {(msg.type === 'image' || msg.media?.type === 'image' || (msg.mediaUrl && !msg.mediaUrl.match(/\.(mp4|webm|mov|mkv)$/i))) && (
+                    <div className="rounded-xl overflow-hidden mt-1.5 max-h-56 border border-black/10">
+                      <img
+                        src={msg.media?.url || msg.mediaUrl}
+                        alt="Attached from device"
+                        className="w-full h-full object-cover cursor-pointer hover:opacity-95 transition-opacity"
+                        onClick={() => window.open(msg.media?.url || msg.mediaUrl, '_blank')}
+                      />
+                    </div>
+                  )}
+
+                  {/* Video Player */}
+                  {(msg.type === 'video' || msg.media?.type === 'video' || (msg.mediaUrl && msg.mediaUrl.match(/\.(mp4|webm|mov|mkv)$/i))) && (
+                    <div className="rounded-xl overflow-hidden mt-1.5 max-h-64 border border-black/10 bg-black">
+                      <video
+                        controls
+                        src={msg.media?.url || msg.mediaUrl}
+                        className="w-full h-full max-h-64 rounded-xl"
+                      />
                     </div>
                   )}
 
                   {/* Audio Note Player */}
-                  {msg.media?.type === 'audio' && (
+                  {(msg.type === 'voice_note' || msg.type === 'audio' || msg.media?.type === 'audio') && (
                     <div className="pt-1">
-                      <audio controls src={msg.media.url} className="w-full h-8" />
+                      <audio controls src={msg.media?.url || msg.mediaUrl} className="w-full h-8" />
                     </div>
                   )}
 
@@ -370,21 +416,55 @@ export default function ChatPage() {
           </div>
         )}
 
+        {/* Hidden inputs for device media upload */}
+        <input
+          type="file"
+          ref={photoInputRef}
+          accept="image/*"
+          onChange={handleDeviceFileUpload}
+          className="hidden"
+        />
+        <input
+          type="file"
+          ref={videoInputRef}
+          accept="video/*"
+          onChange={handleDeviceFileUpload}
+          className="hidden"
+        />
+
+        {uploadingMedia && (
+          <div className="p-2.5 bg-amber-50 border-t border-amber-200 text-xs font-semibold text-amber-800 flex items-center justify-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin text-amber-600" />
+            <span>Uploading media from your device...</span>
+          </div>
+        )}
+
         {/* Composer Bar */}
         {!isLocked ? (
           <div className="p-3 bg-white border-t border-slate-200 flex items-center gap-2">
             <button
               type="button"
-              onClick={handleSimulatePhoto}
-              className="p-2.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-              title="Attach Photo"
+              onClick={() => photoInputRef.current?.click()}
+              disabled={uploadingMedia}
+              className="p-2.5 rounded-xl text-slate-500 hover:text-amber-600 hover:bg-amber-50 transition-colors"
+              title="Upload Photo from Device"
             >
-              <Image className="w-5 h-5" />
+              <Camera className="w-5 h-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => videoInputRef.current?.click()}
+              disabled={uploadingMedia}
+              className="p-2.5 rounded-xl text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+              title="Upload Video from Device"
+            >
+              <Video className="w-5 h-5" />
             </button>
             <button
               type="button"
               onClick={() => setShowVoiceRecorder(!showVoiceRecorder)}
-              className="p-2.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+              disabled={uploadingMedia}
+              className="p-2.5 rounded-xl text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors"
               title="Record Voice Note"
             >
               <Mic className="w-5 h-5" />
@@ -400,6 +480,7 @@ export default function ChatPage() {
             <button
               type="button"
               onClick={() => handleSendMessage()}
+              disabled={uploadingMedia}
               className="p-3 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white shadow-md active:scale-95 transition-all"
             >
               <Send className="w-4 h-4" />

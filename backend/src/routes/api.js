@@ -10,6 +10,7 @@ const callController = require('../controllers/callController');
 const adminController = require('../controllers/adminController');
 const pricingService = require('../services/pricingService');
 const notificationService = require('../services/notificationService');
+const upload = require('../middleware/upload');
 const db = require('../models/dataStore');
 
 // 1. Health & Status Check
@@ -54,9 +55,58 @@ router.post('/requests/:id/start', requireAuth, (req, res) => requestController.
 router.post('/requests/:id/complete', requireAuth, (req, res) => requestController.completeRequest(req, res));
 router.patch('/requests/:id/cancel', requireAuth, (req, res) => requestController.cancelRequest(req, res));
 router.patch('/requests/:id/reschedule', requireAuth, (req, res) => requestController.rescheduleRequest(req, res));
-router.post('/requests/:id/media', requireAuth, (req, res) => requestController.addMedia(req, res));
+router.post('/requests/:id/media', requireAuth, upload.single('file'), (req, res) => requestController.addMedia(req, res));
 router.post('/requests/:id/rate', requireAuth, (req, res) => requestController.submitRating(req, res));
 router.post('/requests/:id/contact-alerts/:alertIndex/retry', requireAuth, (req, res) => requestController.retryContactAlert(req, res));
+
+// 4b. Local Device Media File Upload (Images & Videos)
+router.post('/upload', optionalAuth, upload.single('file'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'ValidationError', message: 'No file provided for upload.' });
+  }
+
+  const isVideo = req.file.mimetype.startsWith('video/');
+  const fileData = {
+    id: `med_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    type: isVideo ? 'video' : 'image',
+    url: `/uploads/${req.file.filename}`,
+    fileName: req.file.originalname,
+    mimeType: req.file.mimetype,
+    size: req.file.size,
+    uploadedAt: new Date().toISOString()
+  };
+
+  return res.status(201).json({
+    success: true,
+    message: `${isVideo ? 'Video' : 'Image'} uploaded successfully from local device.`,
+    file: fileData
+  });
+});
+
+router.post('/upload/multiple', optionalAuth, upload.array('files', 5), (req, res) => {
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ error: 'ValidationError', message: 'No files provided for upload.' });
+  }
+
+  const files = req.files.map((file) => {
+    const isVideo = file.mimetype.startsWith('video/');
+    return {
+      id: `med_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      type: isVideo ? 'video' : 'image',
+      url: `/uploads/${file.filename}`,
+      fileName: file.originalname,
+      mimeType: file.mimetype,
+      size: file.size,
+      uploadedAt: new Date().toISOString()
+    };
+  });
+
+  return res.status(201).json({
+    success: true,
+    message: `${files.length} file(s) uploaded successfully from local device.`,
+    files
+  });
+});
 
 // 5. Live Tracking Session Stream
 router.get('/tracking/:id', requireAuth, (req, res) => {

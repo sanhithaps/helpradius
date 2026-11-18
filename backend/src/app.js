@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
@@ -92,6 +93,10 @@ if (process.env.NODE_ENV !== 'test') {
   });
   app.post('/api/requests', sosLimiter);
 }
+
+// Serve uploaded local media files (Images and Videos)
+const uploadsDirectory = path.join(__dirname, '../uploads');
+app.use('/uploads', express.static(uploadsDirectory));
 
 // Mount API routes
 app.use('/api', apiRoutes);

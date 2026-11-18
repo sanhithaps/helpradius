@@ -493,22 +493,39 @@ class RequestController {
     return res.json({ message: 'Request rescheduled successfully', request });
   }
 
-  // Attach media to request
+  // Attach media to request (supports local file upload via multipart/form-data or JSON payload)
   async addMedia(req, res) {
     const { id } = req.params;
-    const { type, url, fileName } = req.body;
     const request = db.requests.get(id);
     if (!request) return res.status(404).json({ error: 'NotFound' });
 
-    request.media = request.media || [];
-    const mediaItem = {
-      id: uuidv4(),
-      type: type || 'image',
-      url: url || 'https://images.unsplash.com/photo-1584432810601-6c7f27d2362b?w=600',
-      fileName: fileName || 'attachment',
-      uploadedAt: new Date().toISOString()
-    };
+    let mediaItem;
+    if (req.file) {
+      const isVideo = req.file.mimetype.startsWith('video/');
+      mediaItem = {
+        id: uuidv4(),
+        type: isVideo ? 'video' : 'image',
+        url: `/uploads/${req.file.filename}`,
+        fileName: req.file.originalname,
+        mimeType: req.file.mimetype,
+        size: req.file.size,
+        uploadedAt: new Date().toISOString()
+      };
+    } else {
+      const { type, url, fileName } = req.body || {};
+      if (!url) {
+        return res.status(400).json({ error: 'ValidationError', message: 'No file or media URL provided.' });
+      }
+      mediaItem = {
+        id: uuidv4(),
+        type: type || 'image',
+        url: url,
+        fileName: fileName || 'attachment',
+        uploadedAt: new Date().toISOString()
+      };
+    }
 
+    request.media = request.media || [];
     request.media.push(mediaItem);
     db.requests.set(id, request);
     db.saveRequests();

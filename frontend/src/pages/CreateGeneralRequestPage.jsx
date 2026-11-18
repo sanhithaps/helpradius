@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import LocationPickerMap from '../components/LocationPickerMap';
@@ -13,6 +13,9 @@ import {
   ShoppingBag,
   HelpCircle,
   Camera,
+  Video,
+  UploadCloud,
+  Loader2,
   IndianRupee,
   ArrowRight,
   ShieldCheck,
@@ -36,11 +39,14 @@ export default function CreateGeneralRequestPage() {
   const [location, setLocation] = useState({ lat: userLocation?.lat, lng: userLocation?.lng });
   const [isPinManuallyMoved, setIsPinManuallyMoved] = useState(false);
   const [selectedRadiusKm, setSelectedRadiusKm] = useState(2);
-  const [voluntaryReward, setVoluntaryReward] = useState(50);
   const [mediaList, setMediaList] = useState([]);
   const [breakdown, setBreakdown] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
+
+  const photoInputRef = useRef(null);
+  const videoInputRef = useRef(null);
 
   // Sync location with live device GPS when acquired
   useEffect(() => {
@@ -72,16 +78,37 @@ export default function CreateGeneralRequestPage() {
     setShowVoiceRecorder(false);
   };
 
-  const handleSimulatePhoto = () => {
-    setMediaList(prev => [
-      ...prev,
-      {
-        id: `img_${Date.now()}`,
-        type: 'image',
-        url: 'https://images.unsplash.com/photo-1486006920555-c77dce18193b?w=600',
-        fileName: 'vehicle_breakdown_photo.jpg'
+  // Upload local image or video from device
+  const handleDeviceFileUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    setUploadingMedia(true);
+    try {
+      for (const file of files) {
+        if (file.size > 50 * 1024 * 1024) {
+          alert(`File "${file.name}" exceeds 50MB.`);
+          continue;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const res = await api.post('/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+
+        if (res.data?.file) {
+          setMediaList(prev => [...prev, res.data.file]);
+        }
       }
-    ]);
+    } catch (err) {
+      console.error('File upload failed', err);
+      alert('Could not upload media from device. Please check file format and size.');
+    } finally {
+      setUploadingMedia(false);
+      if (e.target) e.target.value = '';
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -193,27 +220,63 @@ export default function CreateGeneralRequestPage() {
             <span>{description.length} / 300</span>
           </div>
 
-          {/* Media Attachments */}
+          {/* Media Attachments from Local Device */}
           <div className="pt-2 border-t border-slate-100 space-y-3">
-            <span className="text-xs font-bold text-slate-600 block">Optional Attachments:</span>
+            <span className="text-xs font-bold text-slate-600 block">Optional Media from Your Device:</span>
+
+            {/* Hidden device file inputs */}
+            <input
+              type="file"
+              ref={photoInputRef}
+              accept="image/*"
+              onChange={handleDeviceFileUpload}
+              className="hidden"
+              multiple
+            />
+            <input
+              type="file"
+              ref={videoInputRef}
+              accept="video/*"
+              onChange={handleDeviceFileUpload}
+              className="hidden"
+            />
+
             <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"
-                onClick={handleSimulatePhoto}
-                className="px-3.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1.5"
+                onClick={() => photoInputRef.current?.click()}
+                disabled={uploadingMedia}
+                className="px-3.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1.5 transition-all shadow-sm"
               >
-                <Camera className="w-4 h-4 text-slate-500" />
-                <span>Add Photo / Video</span>
+                <Camera className="w-4 h-4 text-amber-500" />
+                <span>Upload Photo</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => videoInputRef.current?.click()}
+                disabled={uploadingMedia}
+                className="px-3.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1.5 transition-all shadow-sm"
+              >
+                <Video className="w-4 h-4 text-rose-500" />
+                <span>Upload Video</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setShowVoiceRecorder(!showVoiceRecorder)}
-                className="px-3.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1.5"
+                className="px-3.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1.5 transition-all shadow-sm"
               >
                 <span>Record Audio Note</span>
               </button>
             </div>
+
+            {uploadingMedia && (
+              <div className="flex items-center gap-2 text-xs font-semibold text-amber-700 bg-amber-50 p-2.5 rounded-xl border border-amber-200">
+                <Loader2 className="w-4 h-4 animate-spin text-amber-600" />
+                <span>Uploading media file from your device...</span>
+              </div>
+            )}
 
             {showVoiceRecorder && (
               <VoiceNoteRecorder
@@ -223,14 +286,33 @@ export default function CreateGeneralRequestPage() {
             )}
 
             {mediaList.length > 0 && (
-              <div className="flex flex-wrap gap-2 pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-2">
                 {mediaList.map((m, i) => (
-                  <div key={i} className="px-3 py-1.5 rounded-xl bg-slate-100 text-xs font-semibold text-slate-700 flex items-center gap-2">
-                    <span>{m.type === 'audio' ? '🎵 Voice Note' : '📷 Photo'} ({m.fileName})</span>
+                  <div key={i} className="relative group p-2 rounded-2xl bg-slate-50 border border-slate-200 flex items-center gap-2.5 shadow-sm">
+                    {m.type === 'image' && (
+                      <img src={m.url} alt={m.fileName} className="w-12 h-12 rounded-xl object-cover border border-slate-200 flex-shrink-0" />
+                    )}
+                    {m.type === 'video' && (
+                      <video src={m.url} className="w-12 h-12 rounded-xl object-cover bg-black flex-shrink-0" />
+                    )}
+                    {m.type === 'audio' && (
+                      <div className="w-12 h-12 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center text-lg flex-shrink-0">
+                        🎤
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0 text-left">
+                      <span className="block text-xs font-bold text-slate-800 truncate">
+                        {m.fileName || `${m.type.toUpperCase()} Attachment`}
+                      </span>
+                      <span className="block text-[10px] text-slate-500 uppercase font-semibold">
+                        {m.type} {m.size ? `• ${Math.round(m.size / 1024)} KB` : ''}
+                      </span>
+                    </div>
                     <button
                       type="button"
                       onClick={() => setMediaList(prev => prev.filter((_, idx) => idx !== i))}
-                      className="text-slate-400 hover:text-rose-600 font-bold"
+                      className="w-6 h-6 rounded-full bg-slate-200 hover:bg-rose-500 hover:text-white text-slate-600 flex items-center justify-center text-xs font-bold transition-colors"
+                      title="Remove media"
                     >
                       ✕
                     </button>

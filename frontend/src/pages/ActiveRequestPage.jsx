@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSocket, useSocketEvent } from '../context/SocketContext';
@@ -26,7 +26,10 @@ import {
   Calendar,
   Share2,
   Info,
-  ArrowRight
+  ArrowRight,
+  Camera,
+  Video,
+  Loader2
 } from 'lucide-react';
 
 export default function ActiveRequestPage() {
@@ -45,6 +48,42 @@ export default function ActiveRequestPage() {
   const [ratingComment, setRatingComment] = useState('');
   const [isSafeChecked, setIsSafeChecked] = useState(true);
   const [retryingIndex, setRetryingIndex] = useState(null);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const mediaInputRef = useRef(null);
+
+  const handleUploadAdditionalMedia = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 50 * 1024 * 1024) {
+      alert(`File "${file.name}" exceeds the 50MB limit.`);
+      if (e.target) e.target.value = '';
+      return;
+    }
+
+    setUploadingMedia(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await api.post(`/requests/${id}/media`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      if (res.data?.media) {
+        setRequest((prev) => ({
+          ...prev,
+          media: [...(prev?.media || []), res.data.media]
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to attach media to request', err);
+      alert('Could not attach file from device. Please check format and try again.');
+    } finally {
+      setUploadingMedia(false);
+      if (e.target) e.target.value = '';
+    }
+  };
 
   // Poll request details and tracking updates
   const fetchDetails = async () => {
@@ -243,6 +282,85 @@ export default function ActiveRequestPage() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* ATTACHED LOCAL MEDIA (Photos & Videos from Device) */}
+      <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Camera className="w-5 h-5 text-slate-700" />
+            <h3 className="font-extrabold text-slate-900 text-sm">
+              Attached Photos & Videos ({request.media?.length || 0})
+            </h3>
+          </div>
+
+          <input
+            type="file"
+            ref={mediaInputRef}
+            accept="image/*,video/*"
+            onChange={handleUploadAdditionalMedia}
+            className="hidden"
+          />
+
+          {!isCompleted && !isCancelled && (
+            <button
+              type="button"
+              onClick={() => mediaInputRef.current?.click()}
+              disabled={uploadingMedia}
+              className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
+            >
+              {uploadingMedia ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-600" />
+                  <span>Uploading from device...</span>
+                </>
+              ) : (
+                <>
+                  <Camera className="w-3.5 h-3.5 text-slate-600" />
+                  <span>Attach Media from Device</span>
+                </>
+              )}
+            </button>
+          )}
+        </div>
+
+        {request.media && request.media.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {request.media.map((m, idx) => (
+              <div key={idx} className="group relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 shadow-sm flex flex-col">
+                {m.type === 'image' && (
+                  <div
+                    className="h-32 w-full overflow-hidden bg-slate-100 cursor-pointer"
+                    onClick={() => window.open(m.url, '_blank')}
+                    title="Click to view full size"
+                  >
+                    <img
+                      src={m.url}
+                      alt={m.fileName || 'Photo'}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                    />
+                  </div>
+                )}
+                {m.type === 'video' && (
+                  <div className="h-32 w-full bg-black flex items-center justify-center">
+                    <video controls src={m.url} className="w-full h-full object-cover rounded-t-2xl" />
+                  </div>
+                )}
+                {m.type === 'audio' && (
+                  <div className="h-32 w-full bg-amber-50 p-3 flex flex-col justify-center items-center gap-2">
+                    <span className="text-2xl">🎤</span>
+                    <audio controls src={m.url} className="w-full h-8" />
+                  </div>
+                )}
+                <div className="p-2 bg-white text-[11px] font-semibold text-slate-700 truncate">
+                  {m.fileName || `${m.type ? m.type.toUpperCase() : 'Media'} file`}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-slate-400 italic">No media attached yet. Tap "Attach Media from Device" to upload photos or videos of the situation.</p>
+        )}
       </div>
 
       {/* DYNAMIC RADIUS EXPANSION ENGINE HUD (When searching) */}

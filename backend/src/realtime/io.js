@@ -139,7 +139,7 @@ function initIO(httpServer) {
       messages.push(msg);
       db.messages.set(requestId, messages);
 
-      chat.lastMessage = msg.type === 'voice_note' ? '🎤 Voice Note' : msg.text;
+      chat.lastMessage = msg.type === 'voice_note' ? '🎤 Voice Note' : (msg.type === 'video' ? '🎥 Video' : (msg.type === 'image' ? '📷 Photo' : (msg.text || 'Shared media')));
       chat.lastMessageAt = msg.createdAt;
       db.chats.set(requestId, chat);
 
