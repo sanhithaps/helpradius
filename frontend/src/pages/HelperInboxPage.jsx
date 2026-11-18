@@ -14,7 +14,11 @@ import {
   ShieldCheck,
   ChevronRight,
   Flame,
-  UserCheck
+  UserCheck,
+  Camera,
+  Video,
+  Eye,
+  ExternalLink
 } from 'lucide-react';
 
 export default function HelperInboxPage() {
@@ -27,6 +31,7 @@ export default function HelperInboxPage() {
   const [loading, setLoading] = useState(true);
   const [acceptingId, setAcceptingId] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
+  const [urgentPopupRequest, setUrgentPopupRequest] = useState(null);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -72,13 +77,21 @@ export default function HelperInboxPage() {
         if (prev.some((r) => r.id === data.request.id)) return prev;
         return [data.request, ...prev];
       });
+      // Pop up the urgent interactive modal showing uploaded photos/videos!
+      setUrgentPopupRequest(data.request);
       showToast(`🚨 New ${data.request.type.toUpperCase()} request nearby!`);
     }
   });
 
   // Real-time Event: Radius Engine Notification
-  useSocketEvent('notification:new', () => {
+  useSocketEvent('notification:new', (data) => {
     fetchInbox();
+    if (data?.notification?.requestId) {
+      const match = inboxRequests.find(r => r.id === data.notification.requestId);
+      if (match) {
+        setUrgentPopupRequest(match);
+      }
+    }
   });
 
   // Real-time Event: Request Taken by another helper
@@ -279,10 +292,65 @@ export default function HelperInboxPage() {
                           <Clock className="w-3.5 h-3.5 text-slate-400" />
                           <span>{new Date(request.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                         </span>
+                        {request.distanceKm != null && (
+                          <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                            ~{request.distanceKm} km away
+                          </span>
+                        )}
                       </div>
+
+                      {/* ATTACHED LOCAL MEDIA PREVIEW (Images & Videos) */}
+                      {request.media && request.media.length > 0 && (
+                        <div className="pt-2 border-t border-slate-100 space-y-2">
+                          <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700">
+                            <Camera className="w-3.5 h-3.5 text-amber-500" />
+                            <span>Attached Media from Requester ({request.media.length}):</span>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            {request.media.map((m, mIdx) => (
+                              <div key={mIdx} className="rounded-xl overflow-hidden border border-slate-200 bg-slate-50 flex flex-col shadow-sm">
+                                {m.type === 'image' && (
+                                  <div
+                                    className="h-24 w-full bg-slate-100 cursor-pointer overflow-hidden group"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      window.open(m.url, '_blank');
+                                    }}
+                                    title="Click to view full photo"
+                                  >
+                                    <img src={m.url} alt="Photo" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                                  </div>
+                                )}
+                                {m.type === 'video' && (
+                                  <div className="h-28 w-full bg-black">
+                                    <video controls src={m.url} className="w-full h-full object-cover" />
+                                  </div>
+                                )}
+                                {m.type === 'audio' && (
+                                  <div className="p-2 bg-amber-50 flex items-center gap-1.5">
+                                    <span className="text-sm">🎤</span>
+                                    <audio controls src={m.url} className="w-full h-6" />
+                                  </div>
+                                )}
+                                <span className="px-2 py-1 bg-white text-[10px] text-slate-600 truncate font-semibold">
+                                  {m.fileName || `${m.type} file`}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
-                    <div className="flex items-center gap-2 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
+                    <div className="flex items-center gap-2 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setUrgentPopupRequest(request)}
+                        className="p-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600"
+                        title="View Full Popup & Media"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
                       <button
                         type="button"
                         onClick={() => handleDecline(request.id)}
@@ -316,6 +384,118 @@ export default function HelperInboxPage() {
           </div>
         )}
       </div>
+
+      {/* URGENT HELP REQUEST POP-UP MODAL (When request arrives or is clicked) */}
+      {urgentPopupRequest && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border-2 border-rose-400 space-y-4 max-h-[90vh] overflow-y-auto animate-scale-up">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-rose-600 text-white flex items-center justify-center text-xl animate-pulse">
+                  🚨
+                </div>
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-100 text-rose-800">
+                    {urgentPopupRequest.type} • {urgentPopupRequest.priority || 'URGENT'}
+                  </span>
+                  <h3 className="text-lg font-black text-slate-900 mt-0.5 capitalize">
+                    {urgentPopupRequest.category?.replace(/_/g, ' ')}
+                  </h3>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setUrgentPopupRequest(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-sm font-semibold text-slate-800">
+              "{urgentPopupRequest.description}"
+            </div>
+
+            <div className="flex flex-col gap-1 text-xs text-slate-600">
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-rose-500 flex-shrink-0" />
+                <span><strong>Location:</strong> {urgentPopupRequest.location?.address || 'Near live location'}</span>
+              </div>
+              {urgentPopupRequest.distanceKm != null && (
+                <span className="font-bold text-emerald-700 ml-6">
+                  Distance: ~{urgentPopupRequest.distanceKm} km away
+                </span>
+              )}
+            </div>
+
+            {/* ATTACHED IMAGES & VIDEOS POPUP SECTION */}
+            {urgentPopupRequest.media && urgentPopupRequest.media.length > 0 ? (
+              <div className="space-y-2 pt-2 border-t border-slate-100">
+                <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                  <Camera className="w-4 h-4 text-amber-500" />
+                  <span>Requester Uploaded Photos & Videos ({urgentPopupRequest.media.length}):</span>
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {urgentPopupRequest.media.map((m, idx) => (
+                    <div key={idx} className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-900 shadow-sm flex flex-col">
+                      {m.type === 'image' && (
+                        <div
+                          className="h-44 w-full bg-slate-100 cursor-pointer overflow-hidden"
+                          onClick={() => window.open(m.url, '_blank')}
+                          title="Click to view full image"
+                        >
+                          <img src={m.url} alt="Uploaded by requester" className="w-full h-full object-cover hover:scale-105 transition-transform" />
+                        </div>
+                      )}
+                      {m.type === 'video' && (
+                        <div className="h-44 w-full bg-black flex items-center justify-center">
+                          <video controls src={m.url} className="w-full h-full object-cover" />
+                        </div>
+                      )}
+                      {m.type === 'audio' && (
+                        <div className="p-3 bg-amber-50 flex flex-col items-center justify-center h-44 gap-2">
+                          <span className="text-2xl">🎤</span>
+                          <audio controls src={m.url} className="w-full" />
+                        </div>
+                      )}
+                      <div className="p-2 bg-white text-[11px] font-semibold text-slate-800 truncate border-t border-slate-100">
+                        {m.fileName || `${m.type.toUpperCase()} Attachment`}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="p-2.5 rounded-xl bg-slate-50 text-[11px] text-slate-500 italic">
+                No photos or videos attached to this request.
+              </div>
+            )}
+
+            <div className="flex items-center gap-3 pt-3">
+              <button
+                type="button"
+                onClick={() => {
+                  handleAccept(urgentPopupRequest.id);
+                  setUrgentPopupRequest(null);
+                }}
+                disabled={acceptingId === urgentPopupRequest.id}
+                className="flex-1 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm shadow-lg shadow-emerald-600/30 active:scale-95 transition-all flex items-center justify-center gap-2"
+              >
+                <CheckCircle className="w-4 h-4" />
+                <span>{acceptingId === urgentPopupRequest.id ? 'Accepting...' : 'Accept Request Now'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setUrgentPopupRequest(null)}
+                className="px-5 py-3.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm"
+              >
+                Review Later
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

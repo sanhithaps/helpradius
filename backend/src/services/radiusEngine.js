@@ -173,7 +173,8 @@ class RadiusEngine {
         category: request.category,
         distanceKm: helper.distanceKm,
         type: request.type,
-        priority: isEmergency ? 'high' : 'normal'
+        priority: isEmergency ? 'high' : 'normal',
+        media: Array.isArray(request.media) ? request.media : []
       });
     }
 

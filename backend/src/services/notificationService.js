@@ -22,6 +22,7 @@ class NotificationService {
       type: payload.type, // 'emergency_sos' | 'general_help' | 'scheduled_help' | 'accepted' | 'chat'
       distanceKm: payload.distanceKm || null,
       priority: payload.priority || 'normal',
+      media: Array.isArray(payload.media) ? payload.media : [],
       createdAt: new Date().toISOString(),
       read: false
     };

@@ -173,7 +173,8 @@ export const NotificationProvider = ({ children }) => {
       title: notif.title,
       body: notif.body,
       type: notif.type,
-      requestId: notif.requestId
+      requestId: notif.requestId,
+      media: Array.isArray(notif.media) ? notif.media : []
     });
   });
 
@@ -287,6 +288,33 @@ export const NotificationProvider = ({ children }) => {
               >
                 {activeToast.body}
               </p>
+
+              {/* Uploaded Photos / Videos Preview in Toast */}
+              {activeToast.media && activeToast.media.length > 0 && (
+                <div className="flex items-center gap-1.5 mt-2">
+                  {activeToast.media.slice(0, 3).map((m, mi) => (
+                    <div key={mi} className="relative rounded-lg overflow-hidden w-10 h-10 border border-white/20 bg-black/20 flex-shrink-0">
+                      {m.type === 'image' && (
+                        <img src={m.url} alt="Media" className="w-full h-full object-cover" />
+                      )}
+                      {m.type === 'video' && (
+                        <div className="w-full h-full bg-black flex items-center justify-center text-[10px]">
+                          🎥
+                        </div>
+                      )}
+                      {m.type === 'audio' && (
+                        <div className="w-full h-full bg-amber-600/30 flex items-center justify-center text-[10px]">
+                          🎤
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {activeToast.media.length > 3 && (
+                    <span className="text-[10px] opacity-80 font-bold">+{activeToast.media.length - 3}</span>
+                  )}
+                </div>
+              )}
+
               {activeToast.requestId && (
                 <span
                   className={`inline-block mt-1 text-[10px] font-bold underline ${
