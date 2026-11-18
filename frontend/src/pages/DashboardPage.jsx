@@ -76,7 +76,10 @@ export default function DashboardPage({ onOpenSOS }) {
           <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-600">
             <div className="flex items-center gap-1 bg-slate-50 px-2.5 py-1 rounded-xl border border-slate-100">
               <MapPin className="w-3.5 h-3.5 text-rose-500" />
-              <span>{userLocation.address} ({userLocation.lat.toFixed(3)}, {userLocation.lng.toFixed(3)})</span>
+              <span>
+                {userLocation?.address || 'Acquiring GPS...'}
+                {userLocation?.lat != null && userLocation?.lng != null ? ` (${userLocation.lat.toFixed(3)}, ${userLocation.lng.toFixed(3)})` : ''}
+              </span>
             </div>
             <Link
               to="/profile"

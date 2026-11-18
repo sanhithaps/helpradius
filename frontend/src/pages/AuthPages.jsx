@@ -155,8 +155,14 @@ export function RegisterPage() {
   const [verificationId, setVerificationId] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [address, setAddress] = useState(userLocation?.address || 'Bengaluru Central, Karnataka');
+  const [address, setAddress] = useState(userLocation?.address || '');
   const [accountType, setAccountType] = useState('user'); // 'user' (Requester) or 'helper' (Volunteer)
+
+  useEffect(() => {
+    if ((!address || address === 'Acquiring live device GPS...') && userLocation?.address && userLocation.address !== 'Acquiring live device GPS...') {
+      setAddress(userLocation.address);
+    }
+  }, [userLocation?.address]);
 
   // Step 2: Emergency Contact & Volunteer Specifics
   const [contactName, setContactName] = useState('');
@@ -250,9 +256,9 @@ export function RegisterPage() {
           notificationsGranted: notifConsent
         },
         location: {
-          lat: userLocation.lat,
-          lng: userLocation.lng,
-          address: address.trim() || userLocation.address
+          lat: userLocation?.lat ?? null,
+          lng: userLocation?.lng ?? null,
+          address: address.trim() || userLocation?.address || 'Current Location'
         }
       });
 
@@ -427,7 +433,7 @@ export function RegisterPage() {
                 <div className="relative">
                   <input
                     type="text"
-                    placeholder="e.g. Mysuru / Bengaluru Central"
+                    placeholder="e.g. Current street, neighborhood or city"
                     value={address}
                     onChange={(e) => setAddress(e.target.value)}
                     className="w-full p-3.5 pl-10 rounded-2xl border border-slate-200 text-sm outline-none focus:border-rose-500"

@@ -33,8 +33,10 @@ export default function LocationPickerMap({
   const circleRef = useRef(null);
   const helpersLayerRef = useRef(null);
 
+  const hasCoords = location && typeof location.lat === 'number' && typeof location.lng === 'number';
+
   useEffect(() => {
-    if (!mapContainerRef.current) return;
+    if (!mapContainerRef.current || !hasCoords) return;
 
     if (!mapInstanceRef.current) {
       const map = L.map(mapContainerRef.current, {
@@ -103,7 +105,19 @@ export default function LocationPickerMap({
         });
       }
     }
-  }, [location.lat, location.lng, radiusKm, nearbyHelpers, readOnly]);
+  }, [hasCoords, location?.lat, location?.lng, radiusKm, nearbyHelpers, readOnly]);
+
+  if (!hasCoords) {
+    return (
+      <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 flex flex-col items-center justify-center p-6 text-center space-y-3" style={{ height }}>
+        <div className="w-8 h-8 rounded-full border-2 border-rose-500 border-t-transparent animate-spin" />
+        <div className="text-sm font-semibold text-slate-700">Acquiring Live Device GPS...</div>
+        <div className="text-xs text-slate-500 max-w-xs">
+          Please allow browser location permissions when prompted so helpers can locate you accurately.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative rounded-2xl overflow-hidden border border-slate-200 shadow-sm" style={{ height }}>

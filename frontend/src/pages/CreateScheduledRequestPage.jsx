@@ -35,12 +35,24 @@ export default function CreateScheduledRequestPage() {
   const [category, setCategory] = useState('appointment_companion');
   const [scheduledFor, setScheduledFor] = useState(defaultDateTimeStr);
   const [expectedDurationMin, setExpectedDurationMin] = useState(60);
-  const [meetingLocationText, setMeetingLocationText] = useState('Victoria Hospital Main Entrance, Bengaluru');
-  const [location, setLocation] = useState({ lat: userLocation.lat, lng: userLocation.lng });
+  const [meetingLocationText, setMeetingLocationText] = useState(userLocation?.address || '');
+  const [isAddressUserModified, setIsAddressUserModified] = useState(false);
+  const [location, setLocation] = useState({ lat: userLocation?.lat, lng: userLocation?.lng });
+  const [isPinManuallyMoved, setIsPinManuallyMoved] = useState(false);
   const [description, setDescription] = useState('');
   const [voluntaryReward, setVoluntaryReward] = useState(150);
   const [breakdown, setBreakdown] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Sync location and address dynamically with live device GPS
+  useEffect(() => {
+    if (!isPinManuallyMoved && userLocation?.lat != null && userLocation?.lng != null) {
+      setLocation({ lat: userLocation.lat, lng: userLocation.lng });
+    }
+    if (!isAddressUserModified && userLocation?.address && userLocation.address !== 'Acquiring live device GPS...') {
+      setMeetingLocationText(userLocation.address);
+    }
+  }, [userLocation?.lat, userLocation?.lng, userLocation?.address, isPinManuallyMoved, isAddressUserModified]);
 
   useEffect(() => {
     const fetchEstimate = async () => {
@@ -72,11 +84,16 @@ export default function CreateScheduledRequestPage() {
       return;
     }
 
+    const targetLat = (location && typeof location.lat === 'number') ? location.lat : userLocation?.lat;
+    const targetLng = (location && typeof location.lng === 'number') ? location.lng : userLocation?.lng;
+
+    if (targetLat == null || targetLng == null) {
+      alert('Could not determine your device live GPS location. Please allow browser location access or pick your meeting point on the map.');
+      return;
+    }
+
     setSubmitting(true);
     try {
-      const targetLat = (location && typeof location.lat === 'number') ? location.lat : (userLocation?.lat || 12.9716);
-      const targetLng = (location && typeof location.lng === 'number') ? location.lng : (userLocation?.lng || 77.5946);
-
       const res = await api.post('/requests', {
         type: 'scheduled',
         category,
@@ -196,7 +213,10 @@ export default function CreateScheduledRequestPage() {
           <input
             type="text"
             value={meetingLocationText}
-            onChange={(e) => setMeetingLocationText(e.target.value)}
+            onChange={(e) => {
+              setMeetingLocationText(e.target.value);
+              setIsAddressUserModified(true);
+            }}
             placeholder="e.g., Hospital Reception Desk, Gate 2"
             className="w-full p-3.5 rounded-2xl border border-slate-200 text-sm font-semibold text-slate-800 outline-none focus:border-indigo-600"
             required
@@ -204,7 +224,10 @@ export default function CreateScheduledRequestPage() {
 
           <LocationPickerMap
             location={location}
-            onChange={setLocation}
+            onChange={(newLoc) => {
+              setLocation(newLoc);
+              setIsPinManuallyMoved(true);
+            }}
             radiusKm={3}
             height="260px"
           />

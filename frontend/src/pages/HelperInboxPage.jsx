@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 
 export default function HelperInboxPage() {
-  const { user, helperProfile, toggleAvailability } = useAuth();
+  const { user, helperProfile, userLocation, toggleAvailability } = useAuth();
   const { socket, isConnected } = useSocket();
   const navigate = useNavigate();
 
@@ -35,7 +35,12 @@ export default function HelperInboxPage() {
 
   const fetchInbox = async () => {
     try {
-      const res = await api.get('/helpers/inbox');
+      const params = {};
+      if (userLocation?.lat != null && userLocation?.lng != null) {
+        params.lat = userLocation.lat;
+        params.lng = userLocation.lng;
+      }
+      const res = await api.get('/helpers/inbox', { params });
       setInboxRequests(res.data.requests || []);
     } catch (e) {
       console.warn('Failed to fetch inbox', e);
@@ -44,7 +49,18 @@ export default function HelperInboxPage() {
     }
   };
 
-  // Initial load once on mount (no polling loop!)
+  // Sync helper live location to backend when device GPS updates
+  useEffect(() => {
+    if (userLocation?.lat != null && userLocation?.lng != null) {
+      api.put('/helpers/me/location', {
+        lat: userLocation.lat,
+        lng: userLocation.lng
+      }).catch(() => {});
+      fetchInbox();
+    }
+  }, [userLocation?.lat, userLocation?.lng]);
+
+  // Initial load once on mount
   useEffect(() => {
     fetchInbox();
   }, []);
@@ -109,6 +125,12 @@ export default function HelperInboxPage() {
 
   const handleToggleOnline = async () => {
     await toggleAvailability();
+    if (userLocation?.lat != null && userLocation?.lng != null) {
+      await api.put('/helpers/me/location', {
+        lat: userLocation.lat,
+        lng: userLocation.lng
+      }).catch(() => {});
+    }
     if (socket) {
       socket.emit('helpers:toggle-available', { isAvailable: !isAvailable });
     }
@@ -150,6 +172,13 @@ export default function HelperInboxPage() {
                 ? 'Listening to real-time incoming requests via Socket.io streaming'
                 : 'Toggle online to receive nearby assistance notifications'}
             </p>
+            <div className="flex items-center gap-1.5 mt-1 text-[11px] text-slate-600">
+              <MapPin className="w-3.5 h-3.5 text-rose-500" />
+              <span>
+                <strong>Your Device Location:</strong> {userLocation?.address || 'Acquiring GPS...'}
+                {userLocation?.lat != null ? ` (${userLocation.lat.toFixed(4)}, ${userLocation.lng.toFixed(4)})` : ''}
+              </span>
+            </div>
           </div>
         </div>
 

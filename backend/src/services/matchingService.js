@@ -36,7 +36,10 @@ class MatchingService {
       // 5. Must not have already been notified in an earlier radius step
       if (alreadyNotified.has(helper.id)) continue;
 
-      // 6. Calculate distance
+      // 6. Must have valid live device coordinates
+      if (!helper.location || typeof helper.location.lat !== 'number' || typeof helper.location.lng !== 'number') continue;
+
+      // 7. Calculate distance
       const distance = calculateHaversineDistance(
         location.lat,
         location.lng,
@@ -44,7 +47,7 @@ class MatchingService {
         helper.location.lng
       );
 
-      // 7. Check if within current radius
+      // 8. Check if within current radius
       if (distance <= radiusKm) {
         candidates.push({
           helperId: helper.id,

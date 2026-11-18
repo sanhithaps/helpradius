@@ -22,9 +22,13 @@ class HelperController {
       rating: 5.0,
       reviewsCount: 0,
       categories: Array.isArray(categories) && categories.length > 0 ? categories : ['stranded', 'puncture'],
-      location: {
-        lat: 12.9716,
-        lng: 77.5946,
+      location: (req.body.location && typeof req.body.location.lat === 'number') ? {
+        lat: req.body.location.lat,
+        lng: req.body.location.lng,
+        updatedAt: new Date().toISOString()
+      } : {
+        lat: null,
+        lng: null,
         updatedAt: new Date().toISOString()
       },
       verification: {
@@ -72,9 +76,13 @@ class HelperController {
             'accident', 'health', 'personal_safety', 'physical_danger',
             'puncture', 'roadside', 'stranded', 'heavy_lifting', 'groceries', 'companion'
           ],
-          location: {
-            lat: 12.317,
-            lng: 76.658,
+          location: (req.query.lat && req.query.lng) ? {
+            lat: parseFloat(req.query.lat),
+            lng: parseFloat(req.query.lng),
+            updatedAt: new Date().toISOString()
+          } : (user.location?.lat != null && user.location?.lng != null) ? user.location : {
+            lat: null,
+            lng: null,
             updatedAt: new Date().toISOString()
           },
           verification: {
@@ -90,6 +98,20 @@ class HelperController {
         db.users.set(user.id, user);
         db.saveHelpers();
         db.saveUsers();
+      }
+    }
+
+    if (helper && req.query.lat && req.query.lng) {
+      const qLat = parseFloat(req.query.lat);
+      const qLng = parseFloat(req.query.lng);
+      if (!isNaN(qLat) && !isNaN(qLng)) {
+        helper.location = {
+          lat: qLat,
+          lng: qLng,
+          updatedAt: new Date().toISOString()
+        };
+        db.helpers.set(helper.id, helper);
+        db.saveHelpers();
       }
     }
 
@@ -125,9 +147,13 @@ class HelperController {
           'accident', 'health', 'personal_safety', 'physical_danger',
           'puncture', 'roadside', 'stranded', 'heavy_lifting', 'groceries', 'companion'
         ],
-        location: {
-          lat: 12.317,
-          lng: 76.658,
+        location: (req.body.lat != null && req.body.lng != null) ? {
+          lat: req.body.lat,
+          lng: req.body.lng,
+          updatedAt: new Date().toISOString()
+        } : (user.location?.lat != null && user.location?.lng != null) ? user.location : {
+          lat: null,
+          lng: null,
           updatedAt: new Date().toISOString()
         }
       };
@@ -136,8 +162,15 @@ class HelperController {
       db.users.set(user.id, user);
     }
 
-    const { isAvailable } = req.body;
+    const { isAvailable, lat, lng } = req.body;
     helper.isAvailable = isAvailable !== undefined ? Boolean(isAvailable) : true;
+    if (typeof lat === 'number' && typeof lng === 'number') {
+      helper.location = {
+        lat,
+        lng,
+        updatedAt: new Date().toISOString()
+      };
+    }
     db.helpers.set(helper.id, helper);
     db.saveHelpers();
 
@@ -198,15 +231,33 @@ class HelperController {
             'accident', 'health', 'personal_safety', 'physical_danger',
             'puncture', 'roadside', 'stranded', 'heavy_lifting', 'groceries', 'companion'
           ],
-          location: {
-            lat: 12.317,
-            lng: 76.658,
+          location: (req.query.lat && req.query.lng) ? {
+            lat: parseFloat(req.query.lat),
+            lng: parseFloat(req.query.lng),
+            updatedAt: new Date().toISOString()
+          } : (user.location?.lat != null && user.location?.lng != null) ? user.location : {
+            lat: null,
+            lng: null,
             updatedAt: new Date().toISOString()
           }
         };
         db.helpers.set(user.id, helper);
         user.isHelper = true;
         db.users.set(user.id, user);
+        db.saveHelpers();
+      }
+    }
+
+    if (helper && req.query.lat && req.query.lng) {
+      const qLat = parseFloat(req.query.lat);
+      const qLng = parseFloat(req.query.lng);
+      if (!isNaN(qLat) && !isNaN(qLng)) {
+        helper.location = {
+          lat: qLat,
+          lng: qLng,
+          updatedAt: new Date().toISOString()
+        };
+        db.helpers.set(helper.id, helper);
         db.saveHelpers();
       }
     }
@@ -219,22 +270,20 @@ class HelperController {
     const matched = [];
 
     for (const request of db.requests.values()) {
-      if (request.status !== 'searching') continue;
+      if (request.status !== 'searching' && request.status !== 'scheduled') continue;
       if (request.requesterId === helper.userId) continue;
 
-      let dist = 1.2;
-      if (request.location && helper.location) {
+      let dist = 1.0;
+      if (
+        request.location && typeof request.location.lat === 'number' && typeof request.location.lng === 'number' &&
+        helper.location && typeof helper.location.lat === 'number' && typeof helper.location.lng === 'number'
+      ) {
         dist = calculateHaversineDistance(
           request.location.lat,
           request.location.lng,
           helper.location.lat,
           helper.location.lng
         );
-      }
-
-      // If distances differ in test environment, allow request within 50 km or normalize for local testing
-      if (dist > 50) {
-        dist = 1.2;
       }
 
       matched.push({

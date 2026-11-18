@@ -33,13 +33,21 @@ export default function CreateGeneralRequestPage() {
 
   const [category, setCategory] = useState('puncture');
   const [description, setDescription] = useState('');
-  const [location, setLocation] = useState({ lat: userLocation.lat, lng: userLocation.lng });
+  const [location, setLocation] = useState({ lat: userLocation?.lat, lng: userLocation?.lng });
+  const [isPinManuallyMoved, setIsPinManuallyMoved] = useState(false);
   const [selectedRadiusKm, setSelectedRadiusKm] = useState(2);
   const [voluntaryReward, setVoluntaryReward] = useState(50);
   const [mediaList, setMediaList] = useState([]);
   const [breakdown, setBreakdown] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
+
+  // Sync location with live device GPS when acquired
+  useEffect(() => {
+    if (!isPinManuallyMoved && userLocation?.lat != null && userLocation?.lng != null) {
+      setLocation({ lat: userLocation.lat, lng: userLocation.lng });
+    }
+  }, [userLocation?.lat, userLocation?.lng, isPinManuallyMoved]);
 
   // Fetch live transparent pricing breakdown when values change
   useEffect(() => {
@@ -88,6 +96,11 @@ export default function CreateGeneralRequestPage() {
       return;
     }
 
+    if (!location?.lat || !location?.lng) {
+      alert('Could not determine your device live GPS location. Please allow browser location access or drag the pin on the map.');
+      return;
+    }
+
     setSubmitting(true);
     try {
       const res = await api.post('/requests', {
@@ -97,7 +110,7 @@ export default function CreateGeneralRequestPage() {
         location: {
           lat: location.lat,
           lng: location.lng,
-          address: userLocation.address
+          address: userLocation?.address || 'Requester Live Spot'
         },
         voluntaryReward: Number(voluntaryReward) || 0,
         media: mediaList
@@ -235,7 +248,10 @@ export default function CreateGeneralRequestPage() {
           </label>
           <LocationPickerMap
             location={location}
-            onChange={setLocation}
+            onChange={(newLoc) => {
+              setLocation(newLoc);
+              setIsPinManuallyMoved(true);
+            }}
             radiusKm={selectedRadiusKm}
             height="280px"
           />

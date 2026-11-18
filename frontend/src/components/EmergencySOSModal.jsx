@@ -24,7 +24,7 @@ const EMERGENCY_CATEGORIES = [
 ];
 
 export default function EmergencySOSModal({ isOpen, onClose }) {
-  const { user, userLocation } = useAuth();
+  const { user, userLocation, getFreshDevicePosition } = useAuth();
   const navigate = useNavigate();
 
   const [selectedCategory, setSelectedCategory] = useState('personal_safety');
@@ -138,14 +138,30 @@ export default function EmergencySOSModal({ isOpen, onClose }) {
     }
     setSubmitting(true);
     try {
+      let liveLoc = userLocation;
+      if (typeof getFreshDevicePosition === 'function') {
+        try {
+          liveLoc = await getFreshDevicePosition();
+        } catch (posErr) {
+          console.warn('Could not refresh hardware GPS, using last known position', posErr);
+        }
+      }
+
+      if (liveLoc?.lat == null || liveLoc?.lng == null) {
+        alert('Could not determine your device live GPS location. Please allow browser location access.');
+        setSubmitting(false);
+        setInCountdown(false);
+        return;
+      }
+
       const res = await api.post('/requests', {
         type: 'emergency',
         category: selectedCategory,
         location: {
-          lat: userLocation.lat,
-          lng: userLocation.lng,
-          accuracyMeters: userLocation.accuracy,
-          address: userLocation.address
+          lat: liveLoc.lat,
+          lng: liveLoc.lng,
+          accuracyMeters: liveLoc.accuracy || 10,
+          address: liveLoc.address || 'Live Device Emergency Spot'
         },
         description: `High Priority Emergency Alert: ${selectedCategory.toUpperCase()}`
       });
@@ -251,11 +267,19 @@ export default function EmergencySOSModal({ isOpen, onClose }) {
           <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 flex items-center justify-between text-xs">
             <div className="flex items-center gap-2 text-slate-600">
               <Compass className="w-4 h-4 text-rose-500" />
-              <span>Location: <strong>{userLocation.lat.toFixed(4)}, {userLocation.lng.toFixed(4)}</strong></span>
+              <span>
+                Location: <strong>{userLocation?.lat != null ? `${userLocation.lat.toFixed(4)}, ${userLocation.lng.toFixed(4)}` : 'Acquiring device GPS...'}</strong>
+              </span>
             </div>
-            <span className="text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-              GPS ±{userLocation.accuracy}m
-            </span>
+            {userLocation?.accuracy != null ? (
+              <span className="text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                GPS ±{userLocation.accuracy}m
+              </span>
+            ) : (
+              <span className="text-amber-700 font-semibold bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                Locking GPS...
+              </span>
+            )}
           </div>
 
           {/* Center Action: Press & Hold Big Circular SOS Button OR Countdown */}

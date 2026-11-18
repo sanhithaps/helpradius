@@ -165,9 +165,13 @@ class AuthController {
         rating: 5.0,
         reviewsCount: 0,
         categories: Array.isArray(helperCategories) && helperCategories.length > 0 ? helperCategories : defaultCategories,
-        location: location || {
-          lat: 12.9716,
-          lng: 77.5946,
+        location: (location && typeof location.lat === 'number' && typeof location.lng === 'number') ? {
+          lat: location.lat,
+          lng: location.lng,
+          updatedAt: new Date().toISOString()
+        } : {
+          lat: null,
+          lng: null,
           updatedAt: new Date().toISOString()
         },
         verification: {
