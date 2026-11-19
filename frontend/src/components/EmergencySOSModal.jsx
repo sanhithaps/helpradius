@@ -148,7 +148,21 @@ export default function EmergencySOSModal({ isOpen, onClose }) {
       }
 
       if (liveLoc?.lat == null || liveLoc?.lng == null) {
-        alert('Could not determine your device live GPS location. Please allow browser location access.');
+        try {
+          const detectRes = await api.get('/location/detect');
+          if (detectRes.data && typeof detectRes.data.lat === 'number') {
+            liveLoc = {
+              lat: detectRes.data.lat,
+              lng: detectRes.data.lng,
+              accuracy: detectRes.data.accuracy || 2000,
+              address: detectRes.data.address || 'Live Network Location'
+            };
+          }
+        } catch (e) {}
+      }
+
+      if (liveLoc?.lat == null || liveLoc?.lng == null) {
+        alert('Could not determine your device live GPS location. Please allow browser location access or select a location.');
         setSubmitting(false);
         setInCountdown(false);
         return;

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSocketEvent } from '../context/SocketContext';
+import LocationSelectorModal from '../components/LocationSelectorModal';
 import api from '../services/api';
 import {
   AlertTriangle,
@@ -26,6 +27,7 @@ export default function DashboardPage({ onOpenSOS }) {
   const [activeRequests, setActiveRequests] = useState([]);
   const [pastRequests, setPastRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [locationModalOpen, setLocationModalOpen] = useState(false);
 
   const fetchRequests = async () => {
     try {
@@ -74,13 +76,19 @@ export default function DashboardPage({ onOpenSOS }) {
             )}
           </h1>
           <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-600">
-            <div className="flex items-center gap-1 bg-slate-50 px-2.5 py-1 rounded-xl border border-slate-100">
-              <MapPin className="w-3.5 h-3.5 text-rose-500" />
-              <span>
+            <button
+              type="button"
+              onClick={() => setLocationModalOpen(true)}
+              className="flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200 transition-colors text-left"
+              title="Click to view or set device GPS / Area"
+            >
+              <MapPin className="w-3.5 h-3.5 text-rose-500 flex-shrink-0" />
+              <span className="font-medium text-slate-800">
                 {userLocation?.address || 'Acquiring GPS...'}
                 {userLocation?.lat != null && userLocation?.lng != null ? ` (${userLocation.lat.toFixed(3)}, ${userLocation.lng.toFixed(3)})` : ''}
               </span>
-            </div>
+              <span className="text-[10px] text-rose-600 font-bold ml-1 hover:underline">Change / Refine &rarr;</span>
+            </button>
             <Link
               to="/profile"
               className="flex items-center gap-1 bg-rose-50 text-rose-700 px-2.5 py-1 rounded-xl border border-rose-100 hover:bg-rose-100 transition-colors"
@@ -294,6 +302,12 @@ export default function DashboardPage({ onOpenSOS }) {
           </div>
         </div>
       )}
+
+      {/* Location Setup Modal */}
+      <LocationSelectorModal
+        isOpen={locationModalOpen}
+        onClose={() => setLocationModalOpen(false)}
+      />
     </div>
   );
 }

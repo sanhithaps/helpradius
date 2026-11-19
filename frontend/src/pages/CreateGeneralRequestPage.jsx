@@ -123,8 +123,21 @@ export default function CreateGeneralRequestPage() {
       return;
     }
 
-    if (!location?.lat || !location?.lng) {
-      alert('Could not determine your device live GPS location. Please allow browser location access or drag the pin on the map.');
+    let finalLat = location?.lat ?? userLocation?.lat;
+    let finalLng = location?.lng ?? userLocation?.lng;
+
+    if (finalLat == null || finalLng == null) {
+      try {
+        const detectRes = await api.get('/location/detect');
+        if (detectRes.data && typeof detectRes.data.lat === 'number') {
+          finalLat = detectRes.data.lat;
+          finalLng = detectRes.data.lng;
+        }
+      } catch (err) {}
+    }
+
+    if (finalLat == null || finalLng == null) {
+      alert('Could not determine your device location. Please allow location access or select your location.');
       return;
     }
 
@@ -135,8 +148,8 @@ export default function CreateGeneralRequestPage() {
         category,
         description,
         location: {
-          lat: location.lat,
-          lng: location.lng,
+          lat: finalLat,
+          lng: finalLng,
           address: userLocation?.address || 'Requester Live Spot'
         },
         voluntaryReward: Number(voluntaryReward) || 0,

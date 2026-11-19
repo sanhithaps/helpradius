@@ -84,11 +84,21 @@ export default function CreateScheduledRequestPage() {
       return;
     }
 
-    const targetLat = (location && typeof location.lat === 'number') ? location.lat : userLocation?.lat;
-    const targetLng = (location && typeof location.lng === 'number') ? location.lng : userLocation?.lng;
+    let targetLat = (location && typeof location.lat === 'number') ? location.lat : userLocation?.lat;
+    let targetLng = (location && typeof location.lng === 'number') ? location.lng : userLocation?.lng;
 
     if (targetLat == null || targetLng == null) {
-      alert('Could not determine your device live GPS location. Please allow browser location access or pick your meeting point on the map.');
+      try {
+        const detectRes = await api.get('/location/detect');
+        if (detectRes.data && typeof detectRes.data.lat === 'number') {
+          targetLat = detectRes.data.lat;
+          targetLng = detectRes.data.lng;
+        }
+      } catch (err) {}
+    }
+
+    if (targetLat == null || targetLng == null) {
+      alert('Could not determine your device location. Please allow browser location access or pick your meeting point.');
       return;
     }
 

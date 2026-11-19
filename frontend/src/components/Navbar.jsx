@@ -21,16 +21,19 @@ import {
   LogOut,
   LogIn,
   UserPlus,
-  Home
+  Home,
+  MapPin
 } from 'lucide-react';
+import LocationSelectorModal from './LocationSelectorModal';
 
 export default function Navbar({ onOpenSOS }) {
-  const { user, helperProfile, logout, toggleAvailability } = useAuth();
+  const { user, helperProfile, logout, toggleAvailability, userLocation } = useAuth();
   const { notifications, markAllAsRead } = useNotifications();
   const { isConnected: isSocketConnected } = useSocket();
   const [backendStatus, setBackendStatus] = useState('checking');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
+  const [locationModalOpen, setLocationModalOpen] = useState(false);
   const location = useLocation();
 
   useEffect(() => {
@@ -80,6 +83,19 @@ export default function Navbar({ onOpenSOS }) {
                 Socket: <strong className={isSocketConnected ? 'text-emerald-700 font-bold' : 'text-amber-700 font-bold'}>{isSocketConnected ? 'Live' : 'Reconnecting'}</strong>
               </span>
             </div>
+
+            {/* Live Location Pill & Selector Trigger */}
+            <button
+              type="button"
+              onClick={() => setLocationModalOpen(true)}
+              className="hidden sm:flex items-center gap-1.5 ml-2 px-3 py-1 rounded-full text-xs font-semibold border bg-slate-50 hover:bg-slate-100 border-slate-200 transition-colors text-slate-700"
+              title="Click to view or set device location"
+            >
+              <MapPin className="w-3.5 h-3.5 text-rose-600 flex-shrink-0" />
+              <span className="truncate max-w-[130px]">
+                {userLocation?.city || userLocation?.address?.split(',')[0] || 'Set Location'}
+              </span>
+            </button>
           </div>
 
           {/* Center Navigation */}
@@ -395,6 +411,12 @@ export default function Navbar({ onOpenSOS }) {
           <span>Profile</span>
         </Link>
       </div>
+
+      {/* Global Device Location Setup Modal */}
+      <LocationSelectorModal
+        isOpen={locationModalOpen}
+        onClose={() => setLocationModalOpen(false)}
+      />
     </header>
   );
 }
