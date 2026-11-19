@@ -39,6 +39,7 @@ export default function CreateGeneralRequestPage() {
   const [location, setLocation] = useState({ lat: userLocation?.lat, lng: userLocation?.lng });
   const [isPinManuallyMoved, setIsPinManuallyMoved] = useState(false);
   const [selectedRadiusKm, setSelectedRadiusKm] = useState(2);
+  const [voluntaryReward, setVoluntaryReward] = useState(50);
   const [mediaList, setMediaList] = useState([]);
   const [breakdown, setBreakdown] = useState(null);
   const [submitting, setSubmitting] = useState(false);
