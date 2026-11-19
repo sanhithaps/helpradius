@@ -79,3 +79,32 @@ test('Upload API accepts and persists local device video files', async () => {
   assert.strictEqual(data.file.type, 'video');
   assert.ok(data.file.url.startsWith('/uploads/'), 'Video URL must point to /uploads/');
 });
+
+test('Upload API accepts and persists local device audio voice notes', async () => {
+  const boundary = '----WebKitFormBoundaryTestAudio';
+  const dummyAudioContent = Buffer.from('\x1aE\xdf\xa3dummy-webm-audio-header');
+
+  const payload = Buffer.concat([
+    Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="voice_note.webm"\r\nContent-Type: audio/webm\r\n\r\n`),
+    dummyAudioContent,
+    Buffer.from(`\r\n--${boundary}--\r\n`)
+  ]);
+
+  const res = await fetch(`${baseUrl}/api/upload`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': `multipart/form-data; boundary=${boundary}`
+    },
+    body: payload
+  });
+
+  assert.strictEqual(res.status, 201, 'Should return HTTP 201 Created');
+  const data = await res.json();
+  assert.strictEqual(data.success, true);
+  assert.strictEqual(data.file.type, 'audio');
+  assert.ok(data.file.url.startsWith('/uploads/'), 'Audio URL must point to /uploads/');
+
+  // Verify static file serving for audio
+  const fileRes = await fetch(`${baseUrl}${data.file.url}`);
+  assert.strictEqual(fileRes.status, 200, 'Uploaded audio must be streamable via static route');
+});

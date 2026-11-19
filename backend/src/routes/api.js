@@ -66,9 +66,12 @@ router.post('/upload', optionalAuth, upload.single('file'), (req, res) => {
   }
 
   const isVideo = req.file.mimetype.startsWith('video/');
+  const isAudio = req.file.mimetype.startsWith('audio/') || /\.(webm|mp3|wav|ogg|m4a|aac)$/i.test(req.file.originalname);
+  const type = isVideo ? 'video' : (isAudio ? 'audio' : 'image');
+
   const fileData = {
     id: `med_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-    type: isVideo ? 'video' : 'image',
+    type,
     url: `/uploads/${req.file.filename}`,
     fileName: req.file.originalname,
     mimeType: req.file.mimetype,
@@ -78,7 +81,7 @@ router.post('/upload', optionalAuth, upload.single('file'), (req, res) => {
 
   return res.status(201).json({
     success: true,
-    message: `${isVideo ? 'Video' : 'Image'} uploaded successfully from local device.`,
+    message: `${type.charAt(0).toUpperCase() + type.slice(1)} uploaded successfully from local device.`,
     file: fileData
   });
 });
@@ -90,9 +93,11 @@ router.post('/upload/multiple', optionalAuth, upload.array('files', 5), (req, re
 
   const files = req.files.map((file) => {
     const isVideo = file.mimetype.startsWith('video/');
+    const isAudio = file.mimetype.startsWith('audio/') || /\.(webm|mp3|wav|ogg|m4a|aac)$/i.test(file.originalname);
+    const type = isVideo ? 'video' : (isAudio ? 'audio' : 'image');
     return {
       id: `med_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      type: isVideo ? 'video' : 'image',
+      type,
       url: `/uploads/${file.filename}`,
       fileName: file.originalname,
       mimeType: file.mimetype,

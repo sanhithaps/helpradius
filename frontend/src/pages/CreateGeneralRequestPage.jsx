@@ -14,6 +14,8 @@ import {
   HelpCircle,
   Camera,
   Video,
+  Mic,
+  Volume2,
   UploadCloud,
   Loader2,
   IndianRupee,
@@ -48,6 +50,7 @@ export default function CreateGeneralRequestPage() {
 
   const photoInputRef = useRef(null);
   const videoInputRef = useRef(null);
+  const audioInputRef = useRef(null);
 
   // Sync location with live device GPS when acquired
   useEffect(() => {
@@ -254,13 +257,20 @@ export default function CreateGeneralRequestPage() {
               onChange={handleDeviceFileUpload}
               className="hidden"
             />
+            <input
+              type="file"
+              ref={audioInputRef}
+              accept="audio/*"
+              onChange={handleDeviceFileUpload}
+              className="hidden"
+            />
 
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2.5">
               <button
                 type="button"
                 onClick={() => photoInputRef.current?.click()}
                 disabled={uploadingMedia}
-                className="px-3.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1.5 transition-all shadow-sm"
+                className="px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1.5 transition-all shadow-sm"
               >
                 <Camera className="w-4 h-4 text-amber-500" />
                 <span>Upload Photo</span>
@@ -270,7 +280,7 @@ export default function CreateGeneralRequestPage() {
                 type="button"
                 onClick={() => videoInputRef.current?.click()}
                 disabled={uploadingMedia}
-                className="px-3.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1.5 transition-all shadow-sm"
+                className="px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1.5 transition-all shadow-sm"
               >
                 <Video className="w-4 h-4 text-rose-500" />
                 <span>Upload Video</span>
@@ -278,17 +288,32 @@ export default function CreateGeneralRequestPage() {
 
               <button
                 type="button"
-                onClick={() => setShowVoiceRecorder(!showVoiceRecorder)}
-                className="px-3.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1.5 transition-all shadow-sm"
+                onClick={() => audioInputRef.current?.click()}
+                disabled={uploadingMedia}
+                className="px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-1.5 transition-all shadow-sm"
               >
-                <span>Record Audio Note</span>
+                <Volume2 className="w-4 h-4 text-purple-600" />
+                <span>Upload Audio File</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowVoiceRecorder(!showVoiceRecorder)}
+                className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm ${
+                  showVoiceRecorder
+                    ? 'border-rose-500 bg-rose-50 text-rose-700'
+                    : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                }`}
+              >
+                <Mic className="w-4 h-4 text-emerald-600" />
+                <span>{showVoiceRecorder ? 'Close Voice Recorder' : 'Record Voice Note'}</span>
               </button>
             </div>
 
             {uploadingMedia && (
               <div className="flex items-center gap-2 text-xs font-semibold text-amber-700 bg-amber-50 p-2.5 rounded-xl border border-amber-200">
                 <Loader2 className="w-4 h-4 animate-spin text-amber-600" />
-                <span>Uploading media file from your device...</span>
+                <span>Uploading media file from your device to server...</span>
               </div>
             )}
 
@@ -302,34 +327,53 @@ export default function CreateGeneralRequestPage() {
             {mediaList.length > 0 && (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-2">
                 {mediaList.map((m, i) => (
-                  <div key={i} className="relative group p-2 rounded-2xl bg-slate-50 border border-slate-200 flex items-center gap-2.5 shadow-sm">
-                    {m.type === 'image' && (
-                      <img src={m.url} alt={m.fileName} className="w-12 h-12 rounded-xl object-cover border border-slate-200 flex-shrink-0" />
-                    )}
-                    {m.type === 'video' && (
-                      <video src={m.url} className="w-12 h-12 rounded-xl object-cover bg-black flex-shrink-0" />
-                    )}
+                  <div key={i} className="relative group p-2.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 shadow-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {m.type === 'image' && (
+                          <img src={m.url} alt={m.fileName} className="w-10 h-10 rounded-xl object-cover border border-slate-200 flex-shrink-0" />
+                        )}
+                        {m.type === 'video' && (
+                          <div className="w-10 h-10 rounded-xl bg-black flex items-center justify-center text-base flex-shrink-0">
+                            🎥
+                          </div>
+                        )}
+                        {m.type === 'audio' && (
+                          <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center text-base flex-shrink-0">
+                            🎤
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <span className="block text-xs font-bold text-slate-800 truncate max-w-[140px]">
+                            {m.fileName || `${m.type.toUpperCase()} Attachment`}
+                          </span>
+                          <span className="block text-[10px] text-slate-500 uppercase font-semibold">
+                            {m.type} {m.size ? `• ${Math.round(m.size / 1024)} KB` : ''}
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setMediaList(prev => prev.filter((_, idx) => idx !== i))}
+                        className="w-6 h-6 rounded-full bg-slate-200 hover:bg-rose-500 hover:text-white text-slate-600 flex items-center justify-center text-xs font-bold transition-colors flex-shrink-0"
+                        title="Remove media"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    {/* Inline Player for immediate local verification */}
                     {m.type === 'audio' && (
-                      <div className="w-12 h-12 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center text-lg flex-shrink-0">
-                        🎤
+                      <div className="pt-1">
+                        <audio controls src={m.url} className="w-full h-7 rounded" />
                       </div>
                     )}
-                    <div className="flex-1 min-w-0 text-left">
-                      <span className="block text-xs font-bold text-slate-800 truncate">
-                        {m.fileName || `${m.type.toUpperCase()} Attachment`}
-                      </span>
-                      <span className="block text-[10px] text-slate-500 uppercase font-semibold">
-                        {m.type} {m.size ? `• ${Math.round(m.size / 1024)} KB` : ''}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setMediaList(prev => prev.filter((_, idx) => idx !== i))}
-                      className="w-6 h-6 rounded-full bg-slate-200 hover:bg-rose-500 hover:text-white text-slate-600 flex items-center justify-center text-xs font-bold transition-colors"
-                      title="Remove media"
-                    >
-                      ✕
-                    </button>
+                    {m.type === 'video' && (
+                      <div className="pt-1">
+                        <video controls src={m.url} className="w-full h-24 rounded-lg object-cover bg-black" />
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

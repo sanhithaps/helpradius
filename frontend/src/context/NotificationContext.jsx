@@ -291,27 +291,37 @@ export const NotificationProvider = ({ children }) => {
 
               {/* Uploaded Photos / Videos Preview in Toast */}
               {activeToast.media && activeToast.media.length > 0 && (
-                <div className="flex items-center gap-1.5 mt-2">
-                  {activeToast.media.slice(0, 3).map((m, mi) => (
-                    <div key={mi} className="relative rounded-lg overflow-hidden w-10 h-10 border border-white/20 bg-black/20 flex-shrink-0">
-                      {m.type === 'image' && (
-                        <img src={m.url} alt="Media" className="w-full h-full object-cover" />
-                      )}
-                      {m.type === 'video' && (
-                        <div className="w-full h-full bg-black flex items-center justify-center text-[10px]">
-                          🎥
-                        </div>
-                      )}
-                      {m.type === 'audio' && (
-                        <div className="w-full h-full bg-amber-600/30 flex items-center justify-center text-[10px]">
-                          🎤
-                        </div>
-                      )}
+                <div className="space-y-1.5 mt-2">
+                  <div className="flex items-center gap-1.5">
+                    {activeToast.media.slice(0, 3).map((m, mi) => (
+                      <div key={mi} className="relative rounded-lg overflow-hidden w-10 h-10 border border-white/20 bg-black/20 flex-shrink-0">
+                        {m.type === 'image' && (
+                          <img src={m.url} alt="Media" className="w-full h-full object-cover" />
+                        )}
+                        {m.type === 'video' && (
+                          <div className="w-full h-full bg-black flex items-center justify-center text-[10px]">
+                            🎥
+                          </div>
+                        )}
+                        {m.type === 'audio' && (
+                          <div className="w-full h-full bg-amber-600/30 flex items-center justify-center text-[10px]">
+                            🎤
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {activeToast.media.length > 3 && (
+                      <span className="text-[10px] opacity-80 font-bold">+{activeToast.media.length - 3}</span>
+                    )}
+                  </div>
+
+                  {/* Inline Audio Player directly on the help request popup */}
+                  {activeToast.media.filter(m => m.type === 'audio').slice(0, 1).map((am, ai) => (
+                    <div key={ai} className="p-1 rounded-xl bg-black/10 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      <span className="text-xs">🎤</span>
+                      <audio controls src={am.url} className="w-full h-7 rounded" />
                     </div>
                   ))}
-                  {activeToast.media.length > 3 && (
-                    <span className="text-[10px] opacity-80 font-bold">+{activeToast.media.length - 3}</span>
-                  )}
                 </div>
               )}
 
