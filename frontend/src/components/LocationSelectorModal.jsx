@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, reverseGeocode } from '../context/AuthContext';
 import {
   MapPin,
   X,
@@ -9,7 +9,8 @@ import {
   Check,
   ShieldAlert,
   Sparkles,
-  ExternalLink
+  ExternalLink,
+  Loader2
 } from 'lucide-react';
 import api from '../services/api';
 
@@ -24,7 +25,7 @@ const QUICK_PRESETS = [
 ];
 
 export default function LocationSelectorModal({ isOpen, onClose }) {
-  const { userLocation, setUserManualLocation, getFreshDevicePosition } = useAuth();
+  const { userLocation, setUserLocation, setUserManualLocation } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
@@ -49,11 +50,11 @@ export default function LocationSelectorModal({ isOpen, onClose }) {
         const data = await res.json();
         setSearchResults(data || []);
         if (!data || data.length === 0) {
-          setStatusMsg('No matching locations found. Try entering city or area name.');
+          setStatusMsg({ type: 'error', text: 'No matching locations found. Try entering city or area name.' });
         }
       }
     } catch (err) {
-      setStatusMsg('Could not search location. Please check your internet connection.');
+      setStatusMsg({ type: 'error', text: 'Could not search location. Please check your internet connection.' });
     } finally {
       setSearching(false);
     }
@@ -81,7 +82,7 @@ export default function LocationSelectorModal({ isOpen, onClose }) {
 
   const handleDetectNetwork = async () => {
     setDetecting(true);
-    setStatusMsg(null);
+    setStatusMsg({ type: 'info', text: 'Detecting location via Network / Wi-Fi IP...' });
     try {
       const res = await api.get('/location/detect');
       if (res.data && typeof res.data.lat === 'number') {
@@ -90,10 +91,19 @@ export default function LocationSelectorModal({ isOpen, onClose }) {
           lng: res.data.lng,
           address: res.data.address
         });
-        onClose();
+        setStatusMsg({
+          type: 'success',
+          text: `✓ Live Network Location detected: ${res.data.address || res.data.city || 'Karnataka'}`
+        });
+        setTimeout(() => {
+          onClose();
+        }, 1200);
       }
     } catch (e) {
-      setStatusMsg('Network detection failed. Please select from presets or search above.');
+      setStatusMsg({
+        type: 'error',
+        text: 'Network detection failed. Please select from presets or search above.'
+      });
     } finally {
       setDetecting(false);
     }
@@ -101,16 +111,113 @@ export default function LocationSelectorModal({ isOpen, onClose }) {
 
   const handleHardwareGps = async () => {
     setDetecting(true);
-    setStatusMsg(null);
+    setStatusMsg({ type: 'info', text: 'Requesting device GPS from browser...' });
+
+    if (typeof window === 'undefined') {
+      setDetecting(false);
+      return;
+    }
+
+    if (!('geolocation' in navigator)) {
+      setStatusMsg({
+        type: 'error',
+        text: 'Geolocation is not supported by your current browser. Please use "Detect via Network" or search your location.'
+      });
+      setDetecting(false);
+      return;
+    }
+
+    const isInsecure = !window.isSecureContext && window.location.protocol === 'http:';
+
+    const tryGetPosition = (highAccuracy, timeoutMs) => {
+      return new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: highAccuracy,
+          timeout: timeoutMs,
+          maximumAge: 0
+        });
+      });
+    };
+
     try {
-      const loc = await getFreshDevicePosition();
-      if (loc?.lat != null) {
-        onClose();
-      } else {
-        setStatusMsg('Hardware GPS not permitted or unavailable on this device. Using Network location.');
+      let pos;
+      try {
+        // First try high accuracy GPS
+        pos = await tryGetPosition(true, 7000);
+      } catch (firstErr) {
+        // If high accuracy times out or is unavailable (common on laptops without GPS chips),
+        // retry with standard accuracy (Wi-Fi / OS location triangulation)
+        if (firstErr.code === 2 || firstErr.code === 3) {
+          setStatusMsg({ type: 'info', text: 'Connecting to Wi-Fi/system location fix...' });
+          pos = await tryGetPosition(false, 6000);
+        } else {
+          throw firstErr;
+        }
       }
-    } catch (e) {
-      setStatusMsg('Could not acquire hardware GPS. Please allow browser location permissions.');
+
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const accuracy = Math.round(pos.coords.accuracy || 0);
+
+      setStatusMsg({ type: 'info', text: `Acquired GPS (${lat.toFixed(4)}, ${lng.toFixed(4)}). Resolving address...` });
+
+      let address = `Live Device GPS (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+      try {
+        address = await reverseGeocode(lat, lng);
+      } catch (e) {
+        // fallback to coords string
+      }
+
+      const freshLoc = {
+        lat,
+        lng,
+        accuracy,
+        address,
+        isLive: true,
+        isNetworkFallback: false,
+        isManual: false,
+        error: null,
+        updatedAt: new Date().toISOString()
+      };
+
+      setUserLocation(freshLoc);
+
+      try {
+        sessionStorage.setItem('helpradius_device_gps', JSON.stringify(freshLoc));
+      } catch (e) {}
+
+      api.post('/seed/relocate', { lat, lng }).catch(() => {});
+      const token = localStorage.getItem('help_radius_token');
+      if (token) {
+        api.put('/helpers/me/location', { lat, lng }).catch(() => {});
+      }
+
+      setStatusMsg({
+        type: 'success',
+        text: `✓ Live Browser GPS locked! (Accuracy: ±${accuracy}m) — ${address}`
+      });
+
+      // Auto-close modal after brief visual confirmation
+      setTimeout(() => {
+        onClose();
+      }, 1500);
+    } catch (err) {
+      console.warn('Browser GPS Check failed:', err);
+      let errMsg = 'Could not acquire browser GPS.';
+
+      if (isInsecure && (err.code === 1 || err.message?.toLowerCase().includes('secure origin'))) {
+        errMsg = `Browser GPS is restricted by Chrome/Edge on unencrypted HTTP (${window.location.host}). For this device, please click "Detect via Network" (Wi-Fi/IP) or select your city preset.`;
+      } else if (err.code === 1) { // PERMISSION_DENIED
+        errMsg = 'Location permission was denied. Please click the tune/lock icon in your browser address bar, set Location to "Allow", and click "Browser GPS Check" again.';
+      } else if (err.code === 2) { // POSITION_UNAVAILABLE
+        errMsg = 'Device GPS position is unavailable (no satellite/Wi-Fi fix). Please use "Detect via Network" or search your location.';
+      } else if (err.code === 3) { // TIMEOUT
+        errMsg = 'GPS request timed out. Device sensors did not respond in time. Please use "Detect via Network" or select a preset.';
+      } else if (err.message) {
+        errMsg = err.message;
+      }
+
+      setStatusMsg({ type: 'error', text: errMsg });
     } finally {
       setDetecting(false);
     }
@@ -185,7 +292,7 @@ export default function LocationSelectorModal({ isOpen, onClose }) {
               type="button"
               onClick={handleDetectNetwork}
               disabled={detecting}
-              className="p-3.5 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex flex-col items-center justify-center gap-1.5 transition-all shadow-sm"
+              className="p-3.5 rounded-2xl bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white font-bold text-xs flex flex-col items-center justify-center gap-1.5 transition-all shadow-sm"
             >
               <Globe className="w-4 h-4 text-emerald-400" />
               <span>Detect via Network</span>
@@ -195,10 +302,14 @@ export default function LocationSelectorModal({ isOpen, onClose }) {
               type="button"
               onClick={handleHardwareGps}
               disabled={detecting}
-              className="p-3.5 rounded-2xl border border-slate-200 hover:bg-slate-50 text-slate-800 font-bold text-xs flex flex-col items-center justify-center gap-1.5 transition-all"
+              className="p-3.5 rounded-2xl border border-slate-200 hover:bg-slate-50 disabled:opacity-60 text-slate-800 font-bold text-xs flex flex-col items-center justify-center gap-1.5 transition-all"
             >
-              <Navigation className="w-4 h-4 text-rose-600" />
-              <span>Browser GPS Check</span>
+              {detecting ? (
+                <Loader2 className="w-4 h-4 text-rose-600 animate-spin" />
+              ) : (
+                <Navigation className="w-4 h-4 text-rose-600" />
+              )}
+              <span>{detecting ? 'Checking GPS...' : 'Browser GPS Check'}</span>
             </button>
           </div>
 
@@ -247,8 +358,23 @@ export default function LocationSelectorModal({ isOpen, onClose }) {
 
           {/* Status Message */}
           {statusMsg && (
-            <div className="p-3 rounded-xl bg-slate-100 text-xs text-slate-700">
-              {statusMsg}
+            <div
+              className={`p-3.5 rounded-2xl text-xs flex items-start gap-2.5 transition-all ${
+                statusMsg.type === 'success'
+                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                  : statusMsg.type === 'error'
+                  ? 'bg-rose-50 text-rose-800 border border-rose-200'
+                  : 'bg-sky-50 text-sky-800 border border-sky-200'
+              }`}
+            >
+              {statusMsg.type === 'success' && <Check className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />}
+              {statusMsg.type === 'error' && <ShieldAlert className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />}
+              {(!statusMsg.type || statusMsg.type === 'info') && (
+                <Sparkles className="w-4 h-4 text-sky-600 flex-shrink-0 mt-0.5" />
+              )}
+              <span className="leading-relaxed font-medium">
+                {typeof statusMsg === 'string' ? statusMsg : statusMsg.text}
+              </span>
             </div>
           )}
 

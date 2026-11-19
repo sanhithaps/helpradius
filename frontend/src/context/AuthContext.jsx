@@ -190,11 +190,13 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
-  // Fetch a fresh position snapshot on demand (e.g. before SOS dispatch)
-  const getFreshDevicePosition = () => {
+  // Fetch a fresh position snapshot on demand (e.g. before SOS dispatch or manual trigger)
+  const getFreshDevicePosition = (options = {}) => {
     return new Promise((resolve) => {
-      // If insecure origin (HTTP on LAN), return current or network fallback immediately
-      if (typeof window !== 'undefined' && !window.isSecureContext) {
+      const forceHardware = options?.forceHardware || false;
+
+      // If insecure origin (HTTP on LAN), return current or network fallback immediately unless forceHardware requested
+      if (typeof window !== 'undefined' && !window.isSecureContext && !forceHardware) {
         if (userLocation?.lat != null && userLocation?.lng != null) {
           return resolve(userLocation);
         }
@@ -220,50 +222,60 @@ export const AuthProvider = ({ children }) => {
         return resolve(userLocation);
       }
 
+      const applyPos = async (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const accuracy = Math.round(pos.coords.accuracy || 0);
+        const address = await reverseGeocode(lat, lng).catch(() => `Live GPS (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
+        const loc = {
+          lat,
+          lng,
+          accuracy,
+          address,
+          isLive: true,
+          isNetworkFallback: false,
+          error: null,
+          updatedAt: new Date().toISOString()
+        };
+        setUserLocation(loc);
+        try {
+          sessionStorage.setItem('helpradius_device_gps', JSON.stringify(loc));
+        } catch (e) {}
+        api.post('/seed/relocate', { lat, lng }).catch(() => {});
+        resolve(loc);
+      };
+
       navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          const lat = pos.coords.latitude;
-          const lng = pos.coords.longitude;
-          const accuracy = Math.round(pos.coords.accuracy);
-          const address = await reverseGeocode(lat, lng).catch(() => `Live GPS (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
-          const loc = {
-            lat,
-            lng,
-            accuracy,
-            address,
-            isLive: true,
-            isNetworkFallback: false,
-            error: null,
-            updatedAt: new Date().toISOString()
-          };
-          setUserLocation(loc);
-          try {
-            sessionStorage.setItem('helpradius_device_gps', JSON.stringify(loc));
-          } catch (e) {}
-          resolve(loc);
-        },
-        async (err) => {
-          console.warn('getFreshDevicePosition fallback triggered:', err.message);
-          if (userLocation?.lat != null && userLocation?.lng != null) {
-            return resolve(userLocation);
-          }
-          try {
-            const res = await api.get('/location/detect');
-            const loc = {
-              lat: res.data.lat,
-              lng: res.data.lng,
-              accuracy: res.data.accuracy || 2000,
-              address: res.data.address || 'Live Network Location',
-              city: res.data.city,
-              isLive: true,
-              isNetworkFallback: true,
-              updatedAt: new Date().toISOString()
-            };
-            setUserLocation(loc);
-            resolve(loc);
-          } catch (e) {
-            resolve(userLocation);
-          }
+        applyPos,
+        (err) => {
+          // If high accuracy failed (e.g. timeout on laptop without GPS chip), retry with standard Wi-Fi accuracy
+          navigator.geolocation.getCurrentPosition(
+            applyPos,
+            async (err2) => {
+              console.warn('getFreshDevicePosition fallback triggered:', err2.message);
+              if (userLocation?.lat != null && userLocation?.lng != null) {
+                return resolve(userLocation);
+              }
+              try {
+                const res = await api.get('/location/detect');
+                const loc = {
+                  lat: res.data.lat,
+                  lng: res.data.lng,
+                  accuracy: res.data.accuracy || 2000,
+                  address: res.data.address || 'Live Network Location',
+                  city: res.data.city,
+                  isLive: true,
+                  isNetworkFallback: true,
+                  updatedAt: new Date().toISOString()
+                };
+                setUserLocation(loc);
+                resolve(loc);
+              } catch (e) {
+                resolve(userLocation);
+              }
+            },
+            { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 }
+          );
         },
         { enableHighAccuracy: true, timeout: 5000, maximumAge: 10000 }
       );
